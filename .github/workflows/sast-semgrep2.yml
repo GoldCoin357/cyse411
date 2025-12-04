@@ -1,0 +1,6 @@
+1.	Runs on every push and PR to main.
+2.	Installs Semgrep via pip.
+3.	Uses the OWASP Top 10 rule pack (p/owasp-top-ten).
+4.	Fails the job if Semgrep finds issues (--error).
+5.	Uploads a SARIF report so you see findings in the Security → Code scanning alerts section.
+

@@ -1,0 +1,6 @@
+1. workflow_dispatch so you can run it on demand during class.
+2. It installs Node, runs npm install in fastbank_insecure_classwork, then npm start & to
+launch the app.
+3. OWASP ZAP Full Scan action runs spider + active scan and fails the job if alerts are
+found.GitHub+1
+

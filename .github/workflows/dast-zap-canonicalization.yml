@@ -26,8 +26,7 @@ jobs:
           sleep 10
 
       - name: Run OWASP ZAP full scan
-        uses: zaproxy/action-full-scan@v0.4.0
+        uses: zaproxy/action-full-scan@v0.10.0
         with:
           target: 'http://localhost:3000'
-          rules_file_name: '.zap/rules.tsv'
           cmd_options: '-a'

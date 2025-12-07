@@ -1,0 +1,33 @@
+name: DAST - OWASP ZAP (IDOR)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  zap-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        working-directory: ./idor
+        run: npm install
+
+      - name: Start vulnerable app
+        working-directory: ./idor
+        run: |
+          npm start &
+          sleep 10
+
+      - name: Run OWASP ZAP full scan
+        uses: zaproxy/action-full-scan@v0.4.0
+        with:
+          target: 'http://localhost:3000'
+          rules_file_name: '.zap/rules.tsv'
+          cmd_options: '-a'

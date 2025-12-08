@@ -36,4 +36,28 @@ jobs:
         done
 
     - name: Verify app is running
-      run: curl -I http://local
+      run: curl -I http://localhost:4000
+
+    - name: Test Docker connectivity to backend
+      run: |
+        docker run --rm curlimages/curl curl -s http://host.docker.internal:4000
+        echo "Docker can reach the backend"
+
+    - name: Run OWASP ZAP Full Scan
+      uses: zaproxy/action-full-scan-weekly@v0.1.0
+      continue-on-error: true
+      with:
+        target: 'http://host.docker.internal:4000'
+        cmd_options: '-a'
+        allow_issue_writing: false
+        fail_action: false
+
+    - name: Check report size
+      run: ls -lh report_html.html
+
+    - name: Upload ZAP Report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: zap-report
+        path: report_html.html

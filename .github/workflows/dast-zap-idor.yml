@@ -18,12 +18,26 @@ jobs:
 
     - name: Install dependencies
       working-directory: idor
-      run: npm install
+      run: npm install || true   # handles cases where package.json doesn't exist
 
-    - name: Start app
+    - name: Start IDOR app on port 3000
       working-directory: idor
-      run: npm start &
-    
+      run: node server.js &
+
+    - name: Wait for server
+      run: |
+        for i in {1..20}
+        do
+          if nc -z localhost 3000; then
+            echo "IDOR API server is up!"
+            exit 0
+          fi
+          echo "Waiting for IDOR API server..."
+          sleep 3
+        done
+        echo "IDOR API failed to start"
+        exit 1
+
     - name: OWASP ZAP full scan
       uses: zaproxy/action-full-scan@v0.8.0
       with:

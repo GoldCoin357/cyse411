@@ -8,23 +8,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    # 1️⃣ Checkout repository
     - name: Checkout repository
       uses: actions/checkout@v3
 
+    # 2️⃣ Set up Node.js
     - name: Set up Node.js
       uses: actions/setup-node@v3
       with:
         node-version: '16'
 
+    # 3️⃣ Install backend dependencies
     - name: Install dependencies
       working-directory: ./fastbank_insecure_classwork/backend
       run: npm install
 
-    - name: Start vulnerable app
+    # 4️⃣ Start the backend server
+    - name: Start backend
       working-directory: ./fastbank_insecure_classwork/backend
       run: |
         npm start &
         echo "Waiting for backend to start..."
+        # Wait up to 60 seconds for server to respond
         for i in {1..20}; do
           if curl -s http://localhost:4000; then
             echo "Backend is up"
@@ -34,27 +39,37 @@ jobs:
           sleep 3
         done
 
-    - name: Verify app is running
+    # 5️⃣ Verify backend is running
+    - name: Verify backend
       run: curl -I http://localhost:4000
 
-    - name: Test Docker connectivity to backend
+    # 6️⃣ Get the host IP for Docker
+    - name: Set host IP for Docker
+      id: hostip
       run: |
-        docker run --rm curlimages/curl curl -s http://host.docker.internal:4000
-        echo "Docker can reach the backend"
+        echo "HOST_IP=$(ip -4 addr show docker0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')" >> $GITHUB_ENV
+        echo "Using HOST_IP=${HOST_IP}"
 
+    # 7️⃣ Test Docker can reach backend
+    - name: Test Docker connectivity
+      run: docker run --rm curlimages/curl curl -s http://${{ env.HOST_IP }}:4000
+
+    # 8️⃣ Run OWASP ZAP Full Scan
     - name: Run OWASP ZAP Full Scan
       uses: zaproxy/action-full-scan@v0.13.0
       continue-on-error: true
       with:
         docker_name: 'ghcr.io/zaproxy/zaproxy:weekly'
-        target: 'http://host.docker.internal:4000'
+        target: "http://${{ env.HOST_IP }}:4000"
         cmd_options: '-a'
         allow_issue_writing: false
         fail_action: false
 
+    # 9️⃣ Check that the report exists and is not empty
     - name: Check report size
       run: ls -lh report_html.html
 
+    # 🔟 Upload HTML report
     - name: Upload ZAP Report
       uses: actions/upload-artifact@v4
       if: always()

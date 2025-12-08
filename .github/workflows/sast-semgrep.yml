@@ -1,73 +1,39 @@
-name: SAST - Semgrep HTML
+name: SAST - Semgrep
 
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch:
-
-permissions:
-  contents: read
-  security-events: write
 
 jobs:
   semgrep:
+    name: Semgrep SAST Scan
     runs-on: ubuntu-latest
-
+    
+    permissions:
+      contents: read
+      security-events: write
+    
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v3
-
+      
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.x'
-
-      - name: Install Semgrep & SARIF tools
-        run: pip install semgrep sarif-tools
-
-      # ----------------------------
-      # canonicalization-example
-      # ----------------------------
-      - name: Run Semgrep on canonicalization-example
+      
+      - name: Install Semgrep
         run: |
-          cd canonicalization-example
-          semgrep --config=p/owasp-top-ten --sarif --output semgrep-results.sarif || true
-          sarif html semgrep-results.sarif -o semgrep-report.html
-
-      - name: Upload canonicalization-example HTML
-        uses: actions/upload-artifact@v4
-        with:
-          name: semgrep-html-canonicalization-example
-          path: canonicalization-example/semgrep-report.html
-
-      # ----------------------------
-      # idor
-      # ----------------------------
-      - name: Run Semgrep on idor
+          pip install semgrep
+      
+      - name: Run Semgrep SAST with OWASP Top 10 rules
         run: |
-          cd idor
-          semgrep --config=p/owasp-top-ten --sarif --output semgrep-results.sarif || true
-          sarif html semgrep-results.sarif -o semgrep-report.html
-
-      - name: Upload idor HTML
-        uses: actions/upload-artifact@v4
+          semgrep scan --config=p/owasp-top-ten --sarif --output=semgrep-results.sarif --error .
+      
+      - name: Upload SARIF report
+        if: always()
+        uses: github/codeql-action/upload-sarif@v2
         with:
-          name: semgrep-html-idor
-          path: idor/semgrep-report.html
-
-      # ----------------------------
-      # fastbank-auth-lab
-      # ----------------------------
-      - name: Run Semgrep on fastbank-auth-lab
-        run: |
-          cd fastbank-auth-lab
-          semgrep --config=p/owasp-top-ten --sarif --output semgrep-results.sarif || true
-          sarif html semgrep-results.sarif -o semgrep-report.html
-
-      - name: Upload fastbank-auth-lab HTML
-        uses: actions/upload-artifact@v4
-        with:
-          name: semgrep-html-fastbank-auth-lab
-          path: fastbank-auth-lab/semgrep-report.html
+          sarif_file: semgrep-results.sarif

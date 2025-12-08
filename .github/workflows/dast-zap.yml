@@ -24,4 +24,29 @@ jobs:
       working-directory: ./fastbank_insecure_classwork/backend
       run: |
         npm start &
-        echo "Wait
+        echo "Waiting for server..."
+        # Retry loop to ensure server is ready
+        for i in {1..10}; do
+          curl -s http://localhost:4000 && break
+          echo "Waiting 3s..."
+          sleep 3
+        done
+
+    - name: Verify app is running
+      run: curl -I http://localhost:4000
+
+    - name: Run OWASP ZAP Full Scan
+      uses: zaproxy/action-full-scan@v0.5.0
+      continue-on-error: true      # ⭐ Prevent exit code 2 from failing the workflow
+      with:
+        target: 'http://host.docker.internal:4000'   # Docker container can reach backend
+        cmd_options: '-a'
+        allow_issue_writing: false
+        fail_action: false                          # ⭐ Do not fail workflow on alerts
+
+    - name: Upload ZAP Report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: zap-report
+        path: report_html.html

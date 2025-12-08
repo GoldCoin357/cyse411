@@ -1,57 +1,57 @@
 name: SAST - Semgrep HTML
 
 on:
-push:
-branches: [ main ]
-pull_request:
-branches: [ main ]
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 permissions:
-contents: read
-security-events: write
+  contents: read
+  security-events: write
 
 jobs:
-semgrep:
-runs-on: ubuntu-latest
+  semgrep:
+    runs-on: ubuntu-latest
 
-steps:
-- name: Checkout repository
-uses: actions/checkout@v3
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-- name: Set up Python
-uses: actions/setup-python@v4
-with:
-python-version: '3.x'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
 
-- name: Install dependencies
-run: pip install semgrep sarif-tools
+      - name: Install dependencies
+        run: pip install semgrep sarif-tools
 
-- name: Run Semgrep SAST (SARIF)
+      - name: Run Semgrep SAST (SARIF)
         run: semgrep --config=p/owasp-top-ten --sarif --output semgrep-results.sarif || true
         run: |
           # Generate SARIF report; do not fail workflow on findings
           semgrep --config=p/owasp-top-ten --sarif --output semgrep-results.sarif || true
 
-     - name: Convert SARIF to HTML
+      - name: Convert SARIF to HTML
         run: python -m sarif_tools.html semgrep-results.sarif -o semgrep-report.html
         run: sarif html semgrep-results.sarif -o semgrep-report.html
 
-- name: Upload SARIF to GitHub Security
-uses: github/codeql-action/upload-sarif@v4
-if: always()
-with:
-sarif_file: semgrep-results.sarif
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: semgrep-results.sarif
 
-- name: Upload SARIF artifact
-uses: actions/upload-artifact@v4
-if: always()
-with:
-name: semgrep-sarif
-path: semgrep-results.sarif
+      - name: Upload SARIF artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: semgrep-sarif
+          path: semgrep-results.sarif
 
-- name: Upload HTML report artifact
-uses: actions/upload-artifact@v4
-if: always()
-with:
-name: semgrep-html
-path: semgrep-report.html
+      - name: Upload HTML report artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: semgrep-html
+          path: semgrep-report.html

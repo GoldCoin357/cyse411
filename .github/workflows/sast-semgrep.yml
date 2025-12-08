@@ -29,10 +29,7 @@ jobs:
       - name: Run Semgrep SAST (SARIF)
         run: |
           # Generate SARIF report; do not fail workflow on findings
-          semgrep --config=p/owasp-top-ten \
-                  --sarif \
-                  --output semgrep-results.sarif \
-                  --no-fail
+          semgrep --config=p/owasp-top-ten --sarif --output semgrep-results.sarif || true
 
       - name: Upload SARIF to GitHub Security
         uses: github/codeql-action/upload-sarif@v4

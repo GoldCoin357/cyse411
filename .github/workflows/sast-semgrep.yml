@@ -37,3 +37,10 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: semgrep-results.sarif
+      
+      - name: Upload SARIF file as artifact
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: semgrep-sarif-report
+          path: semgrep-results.sarif

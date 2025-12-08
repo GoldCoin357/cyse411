@@ -5,7 +5,7 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch:   # <-- added manual trigger
+  workflow_dispatch:   # allows manual run
 
 permissions:
   contents: read
@@ -14,36 +14,35 @@ permissions:
 jobs:
   semgrep:
     runs-on: ubuntu-latest
-    
+
+    strategy:
+      matrix:
+        folder: [canonicalization-example, idor, fastbank-auth-lab]
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.x'
-      
-      - name: Install dependencies
-        run: |
-          pip install semgrep sarif-tools
-      
+
+      - name: Install Semgrep
+        run: pip install semgrep sarif-tools
+
       - name: Run Semgrep SAST (SARIF)
         run: |
+          cd ${{ matrix.folder }}
           semgrep --config=p/owasp-top-ten --sarif --output semgrep-results.sarif || true
-      
+
       - name: Convert SARIF to HTML
-        run: sarif html semgrep-results.sarif -o semgrep-report.html
+        run: |
+          cd ${{ matrix.folder }}
+          sarif html semgrep-results.sarif -o semgrep-report.html
 
-      - name: Upload SARIF to GitHub Security
-        uses: github/codeql-action/upload-sarif@v4
-        if: always()
-        with:
-          sarif_file: semgrep-results.sarif
-
-      - name: Upload HTML report artifact
+      - name: Upload HTML artifact
         uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: semgrep-html
-          path: semgrep-report.html
+          name: semgrep-html-${{ matrix.folder }}
+          path: ${{ matrix.folder }}/semgrep-report.html

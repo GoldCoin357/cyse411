@@ -6,10 +6,10 @@ on:
   pull_request:
     branches: [ main ]
 
-
 permissions:
   contents: read           
   security-events: write   
+
 jobs:
   semgrep:
     runs-on: ubuntu-latest
@@ -33,8 +33,15 @@ jobs:
                   --output=semgrep-results.sarif \
                   --error .
 
-      - name: Upload SARIF file
+      - name: Upload SARIF to GitHub Security
         uses: github/codeql-action/upload-sarif@v2
         if: always()
         with:
           sarif_file: semgrep-results.sarif
+
+      - name: Upload SARIF artifact
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: semgrep-sarif
+          path: semgrep-results.sarif

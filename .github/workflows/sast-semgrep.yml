@@ -24,13 +24,20 @@ jobs:
           python-version: '3.x'
 
       - name: Install Semgrep
-        run: pip install semgrep
+        run: pip install semgrep semgrep-html
 
-      - name: Run Semgrep SAST with OWASP Top 10 rules
+      - name: Run Semgrep SAST with OWASP Top 10 rules (SARIF + JSON)
         run: |
           semgrep --config=p/owasp-top-ten \
                   --sarif \
                   --output=semgrep-results.sarif
+          semgrep --config=p/owasp-top-ten \
+                  --json \
+                  --output=semgrep-results.json
+
+      - name: Convert Semgrep JSON to HTML
+        run: |
+          semgrep-html semgrep-results.json --output semgrep-report.html
 
       - name: Upload SARIF to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
@@ -44,3 +51,10 @@ jobs:
         with:
           name: semgrep-sarif
           path: semgrep-results.sarif
+
+      - name: Upload HTML report artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: semgrep-html
+          path: semgrep-report.html

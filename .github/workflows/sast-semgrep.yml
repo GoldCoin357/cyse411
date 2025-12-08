@@ -24,18 +24,18 @@ jobs:
           python-version: '3.x'
 
       - name: Install dependencies
-        run: pip install semgrep sarif-tools
+        run: |
+          pip install semgrep sarif-tools
 
-      - - name: Run Semgrep SAST (SARIF)
-  run: |
-    # Generate SARIF report; do not fail workflow on findings
-    semgrep --config=p/owasp-top-ten --sarif --output semgrep-results.sarif || true
+      - name: Run Semgrep SAST (SARIF)
+        run: |
+          # Generate SARIF report; do not fail workflow on findings
+          semgrep --config=p/owasp-top-ten --sarif --output semgrep-results.sarif || true
 
-- name: Convert SARIF to HTML
-  run: |
-    # Convert SARIF to HTML
-    python -m sarif_tools.html semgrep-results.sarif -o semgrep-report.html
-
+      - name: Convert SARIF to HTML
+        run: |
+          # Convert SARIF to HTML
+          python -m sarif_tools.html semgrep-results.sarif -o semgrep-report.html
 
       - name: Upload SARIF to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
@@ -55,4 +55,3 @@ jobs:
         if: always()
         with:
           name: semgrep-html
-          path: semgrep-report.html

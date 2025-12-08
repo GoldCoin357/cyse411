@@ -24,9 +24,9 @@ jobs:
       working-directory: ./fastbank_insecure_classwork/backend
       run: |
         npm start &
-        echo "Waiting for server..."
-        # Retry loop to ensure server is ready
-        for i in {1..10}; do
+        echo "Waiting for backend to start..."
+        # Wait up to 60s for the server to respond
+        for i in {1..20}; do
           if curl -s http://localhost:4000; then
             echo "Backend is up"
             break
@@ -36,4 +36,4 @@ jobs:
         done
 
     - name: Verify app is running
-      run: curl -I http://lo
+      run: curl -I http://local

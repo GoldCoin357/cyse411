@@ -1,0 +1,33 @@
+name: SAST - Semgrep (Canonicalization)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+    
+    - name: Install Semgrep
+      run: pip install semgrep
+    
+    - name: Run Semgrep SAST
+      working-directory: ./canonicalization-example
+      run: semgrep --config=p/owasp-top-ten --sarif --output=semgrep.sarif --error .
+    
+    - name: Upload SARIF file
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: canonicalization-example/semgrep.sarif
+        category: semgrep-canonicalization

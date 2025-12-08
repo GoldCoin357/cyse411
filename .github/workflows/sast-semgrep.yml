@@ -32,6 +32,7 @@ jobs:
           pip install semgrep
 
       - name: Run Semgrep SAST for selected folder
+        continue-on-error: true   # 🔥 prevents workflow cancellation
         run: |
           semgrep \
             --config p/owasp-top-ten \

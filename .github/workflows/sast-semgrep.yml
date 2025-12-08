@@ -7,8 +7,8 @@ on:
     branches: [ main ]
 
 permissions:
-  contents: read           
-  security-events: write   
+  contents: read
+  security-events: write
 
 jobs:
   semgrep:
@@ -23,9 +23,9 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install Semgrep and SARIF converter
-        run: pip install semgrep sarif-html
+      - name: Install dependencies
+        run: |
+          pip install semgrep sarif-html
 
       - name: Run Semgrep SAST (SARIF + JSON)
         run: |
-          semgrep --config=p/owasp-top-ten --sarif --output semgrep-r

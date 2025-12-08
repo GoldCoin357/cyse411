@@ -5,7 +5,7 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch:
+  workflow_dispatch:   # <-- added manual trigger
 
 permissions:
   contents: read
@@ -32,8 +32,18 @@ jobs:
         run: |
           semgrep --config=p/owasp-top-ten --sarif --output semgrep-results.sarif || true
       
+      - name: Convert SARIF to HTML
+        run: sarif html semgrep-results.sarif -o semgrep-report.html
+
       - name: Upload SARIF to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: semgrep-results.sarif
+
+      - name: Upload HTML report artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: semgrep-html
+          path: semgrep-report.html

@@ -1,0 +1,30 @@
+name: DAST - idor
+
+on:
+  workflow_dispatch:
+
+jobs:
+  zap_scan:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v3
+
+    - name: Setup Node
+      uses: actions/setup-node@v3
+      with:
+        node-version: 18
+
+    - name: Install dependencies
+      working-directory: idor
+      run: npm install
+
+    - name: Start app
+      working-directory: idor
+      run: npm start &
+    
+    - name: OWASP ZAP full scan
+      uses: zaproxy/action-full-scan@v0.8.0
+      with:
+        target: http://localhost:3000

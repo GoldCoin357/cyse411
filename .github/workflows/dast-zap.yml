@@ -17,11 +17,11 @@ jobs:
         node-version: '16'
     
     - name: Install dependencies
-      working-directory: ./fastbank_insecure_classwork
+      working-directory: ./fastbank_insecure_classwork/backend
       run: npm install
     
     - name: Start vulnerable app
-      working-directory: ./fastbank_insecure_classwork
+      working-directory: ./fastbank_insecure_classwork/backend
       run: |
         npm start &
         echo "Waiting for app to start..."
@@ -29,12 +29,12 @@ jobs:
         
     - name: Verify app is running
       run: |
-        curl -I http://localhost:3000 || echo "App may not be running on port 3000"
+        curl -I http://localhost:4000 || echo "App may not be running on port 4000"
     
     - name: Run OWASP ZAP Full Scan
       uses: zaproxy/action-full-scan@v0.4.0
       with:
-        target: 'http://localhost:3000'
+        target: 'http://localhost:4000'
         cmd_options: '-a'
         allow_issue_writing: false
         fail_action: false

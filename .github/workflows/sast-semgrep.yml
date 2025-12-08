@@ -28,20 +28,22 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install Semgrep
+      - name: Install Semgrep & SARIF tools
         run: pip install semgrep sarif-tools
 
       - name: Run Semgrep SAST (SARIF)
         run: |
           cd ${{ matrix.folder }}
+          # Generate SARIF report; workflow won't fail on findings
           semgrep --config=p/owasp-top-ten --sarif --output semgrep-results.sarif || true
 
       - name: Convert SARIF to HTML
         run: |
           cd ${{ matrix.folder }}
+          # This produces a browser-ready HTML like your ZAP report
           sarif html semgrep-results.sarif -o semgrep-report.html
 
-      - name: Upload HTML artifact
+      - name: Upload HTML report artifact
         uses: actions/upload-artifact@v4
         with:
           name: semgrep-html-${{ matrix.folder }}

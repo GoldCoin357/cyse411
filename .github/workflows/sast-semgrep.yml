@@ -40,7 +40,7 @@ jobs:
       
       - name: Upload SARIF file as artifact
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: semgrep-sarif-report
           path: semgrep-results.sarif

@@ -94,4 +94,11 @@ jobs:
           path: |
             report_html.html
             report_json.json
-          retention-days
+          retention-days: 30
+
+      # 9️⃣ Cleanup backend server
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "Stopping backend server..."
+          kill ${{ env.SERVER_PID }} || true

@@ -18,7 +18,7 @@ app.use(rateLimit({
 }));
 
 // ----------------------
-// SECURITY HEADERS (GLOBAL)
+// GLOBAL SECURITY HEADERS
 // ----------------------
 const CSP_HEADER =
   "default-src 'none'; " +
@@ -30,6 +30,7 @@ const CSP_HEADER =
 const PERMISSIONS_POLICY_HEADER =
   'camera=(), microphone=(), geolocation=(), fullscreen=(self), payment=()';
 
+// Middleware to force all security headers
 app.use((req, res, next) => {
   // Remove X-Powered-By
   res.removeHeader('X-Powered-By');
@@ -42,16 +43,16 @@ app.use((req, res, next) => {
   res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
   res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
 
-  // Cache control
+  // Cache headers
   if (req.path.endsWith('robots.txt') || req.path.endsWith('sitemap.xml')) {
-    res.set('Cache-Control', 'public, max-age=3600, immutable');
+    res.setHeader('Cache-Control', 'public, max-age=3600, immutable');
   } else {
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.set('Pragma', 'no-cache');
-    res.set('Expires', '0');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
   }
 
-  // Fetch metadata headers (if missing in request, set defaults)
+  // Sec-Fetch headers defaults
   res.setHeader('Sec-Fetch-Dest', req.get('Sec-Fetch-Dest') || 'document');
   res.setHeader('Sec-Fetch-Mode', req.get('Sec-Fetch-Mode') || 'navigate');
   res.setHeader('Sec-Fetch-Site', req.get('Sec-Fetch-Site') || 'same-origin');
@@ -63,15 +64,13 @@ app.use((req, res, next) => {
 // ----------------------
 // HELMET ENHANCEMENTS
 // ----------------------
-app.use(
-  helmet({
-    crossOriginEmbedderPolicy: true,
-    crossOriginOpenerPolicy: { policy: 'same-origin' },
-    frameguard: { action: 'deny' },
-    referrerPolicy: { policy: 'no-referrer' },
-    noSniff: true
-  })
-);
+app.use(helmet({
+  crossOriginEmbedderPolicy: true,
+  crossOriginOpenerPolicy: { policy: 'same-origin' },
+  frameguard: { action: 'deny' },
+  referrerPolicy: { policy: 'no-referrer' },
+  noSniff: true
+}));
 
 // ----------------------
 // SAFE FILE ACCESS
@@ -99,7 +98,7 @@ function resolveSafe(baseDir, userInput) {
 }
 
 // ----------------------
-// FILE SERVING ENDPOINT
+// SERVE FILES
 // ----------------------
 app.get('/files/*', (req, res) => {
   let filePath;
@@ -113,12 +112,35 @@ app.get('/files/*', (req, res) => {
     return res.status(404).send('File not found');
   }
 
-  // Avoid leaking raw timestamps
+  // Hide raw timestamps
   const stats = fs.statSync(filePath);
   res.setHeader('Last-Modified', stats.mtime.toISOString());
 
   res.sendFile(filePath);
 });
+
+// ----------------------
+// SERVE STATIC FILES (robots.txt, sitemap.xml)
+// ----------------------
+app.use(express.static(BASE_DIR, {
+  setHeaders: (res, path) => {
+    res.removeHeader('X-Powered-By');
+    res.setHeader('Content-Security-Policy', CSP_HEADER);
+    res.setHeader('Permissions-Policy', PERMISSIONS_POLICY_HEADER);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+    res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+
+    if (path.endsWith('robots.txt') || path.endsWith('sitemap.xml')) {
+      res.setHeader('Cache-Control', 'public, max-age=3600, immutable');
+    } else {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+  }
+}));
 
 // ----------------------
 // START SERVER

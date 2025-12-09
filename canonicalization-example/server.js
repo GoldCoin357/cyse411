@@ -8,17 +8,21 @@ const https = require("https");
 
 const app = express();
 
-// -------------------------
-// 1. Remove X-Powered-By
-// -------------------------
+// ---------------------
+// Disable X-Powered-By
+// ---------------------
 app.disable("x-powered-by");
+app.use((req, res, next) => {
+  res.removeHeader("X-Powered-By");
+  next();
+});
 
-// -------------------------
-// 2. Apply Helmet + Secure Headers
-// -------------------------
+// ---------------------
+// Helmet security
+// ---------------------
 app.use(helmet());
 
-// Strong CSP required by ZAP
+// Strong CSP
 app.use(
   helmet.contentSecurityPolicy({
     useDefaults: false,
@@ -37,79 +41,39 @@ app.use(
   })
 );
 
-// -------------------------
-// 3. Rate Limiting
-// -------------------------
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use(limiter);
-
-// -------------------------
-// 4. Force No Cache
-// -------------------------
+// Permissions-Policy
 app.use((req, res, next) => {
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+  next();
+});
+
+// No cache
+app.use((req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
   next();
 });
 
-// -------------------------------------------
-// 5. Safe File Path Resolver
-// -------------------------------------------
-function safeResolve(base, target) {
-  const targetPath = path.normalize(path.join(base, target));
-  if (!targetPath.startsWith(base)) {
-    throw new Error("Invalid path");
-  }
-  return targetPath;
-}
-
-// -------------------------------------------
-// 6. Secure File Download Route
-// -------------------------------------------
-app.get("/files/:name", (req, res) => {
-  try {
-    const filePath = safeResolve(path.join(__dirname, "files"), req.params.name);
-
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: "File not found" });
-    }
-
-    res.download(filePath);
-  } catch (err) {
-    res.status(400).json({ error: "Invalid request" });
-  }
+// Rate limit
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100
 });
+app.use(limiter);
 
-// -------------------------------------------
-// 7. Static Files
-// -------------------------------------------
-app.use(express.static("public", {
-  extensions: ["html"]
-}));
+// Static
+app.use(express.static("public"));
 
-// -------------------------------------------
-// 8. Default Route
-// -------------------------------------------
-app.get("/", (req, res) => {
-  res.send("Secure HTTPS server is running.");
-});
+// Default route
+app.get("/", (req, res) => res.send("Secure HTTPS server running."));
 
-// -------------------------------------------
-// 9. HTTPS Setup (THE ONLY NEW THING)
-// -------------------------------------------
+// HTTPS setup
 const options = {
   key: fs.readFileSync(path.join(__dirname, "certs", "key.pem")),
   cert: fs.readFileSync(path.join(__dirname, "certs", "cert.pem"))
 };
 
-const PORT = process.env.PORT || 3000;
-
-https.createServer(options, app).listen(PORT, () => {
-  console.log(`Secure HTTPS server running on port ${PORT}`);
-});
+https.createServer(options, app).listen(4000, () =>
+  console.log("HTTPS server running on port 4000")
+);

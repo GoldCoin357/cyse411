@@ -1,8 +1,17 @@
-const path = require('path');
 const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const https = require('https');
+
+// ----------------------
+// HTTPS CONFIG (Self-signed for local testing)
+// ----------------------
+const options = {
+  key: fs.readFileSync(path.join(__dirname, 'certs', 'key.pem')),
+  cert: fs.readFileSync(path.join(__dirname, 'certs', 'cert.pem'))
+};
 
 const app = express();
 app.use(express.json());
@@ -11,39 +20,62 @@ app.use(express.json());
 // RATE LIMITING
 // ----------------------
 app.use(rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 100,
   standardHeaders: true,
   legacyHeaders: false
 }));
 
 // ----------------------
-// GLOBAL SECURITY HEADERS
+// HELMET SECURITY HEADERS
 // ----------------------
-const CSP_HEADER =
-  "default-src 'none'; " +
-  "script-src 'self'; style-src 'self'; img-src 'self' data:; " +
-  "connect-src 'self'; font-src 'self'; object-src 'none'; " +
-  "frame-ancestors 'none'; form-action 'self'; base-uri 'self'; " +
-  "worker-src 'self'; manifest-src 'self'; frame-src 'none'";
+app.use(helmet());
 
-const PERMISSIONS_POLICY_HEADER =
-  'camera=(), microphone=(), geolocation=(), fullscreen=(self), payment=()';
+// CSP
+app.use(
+  helmet.contentSecurityPolicy({
+    directives: {
+      defaultSrc: ["'none'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'"],
+      imgSrc: ["'self'", "data:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      formAction: ["'self'"],
+      baseUri: ["'self'"],
+      workerSrc: ["'self'"],
+      manifestSrc: ["'self'"],
+      frameSrc: ["'none'"]
+    }
+  })
+);
 
-// Middleware to force all security headers
+// Permissions Policy
+app.use(
+  helmet.permissionsPolicy({
+    features: {
+      camera: [],
+      microphone: [],
+      geolocation: [],
+      fullscreen: ["'self'"],
+      payment: []
+    }
+  })
+);
+
+// Cross-Origin
 app.use((req, res, next) => {
-  // Remove X-Powered-By
-  res.removeHeader('X-Powered-By');
-
-  // Security headers
-  res.setHeader('Content-Security-Policy', CSP_HEADER);
-  res.setHeader('Permissions-Policy', PERMISSIONS_POLICY_HEADER);
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
   res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
   res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+  next();
+});
 
-  // Cache headers
+// ----------------------
+// CACHE CONTROL
+// ----------------------
+app.use((req, res, next) => {
   if (req.path.endsWith('robots.txt') || req.path.endsWith('sitemap.xml')) {
     res.setHeader('Cache-Control', 'public, max-age=3600, immutable');
   } else {
@@ -51,26 +83,19 @@ app.use((req, res, next) => {
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
   }
-
-  // Sec-Fetch headers defaults
-  res.setHeader('Sec-Fetch-Dest', req.get('Sec-Fetch-Dest') || 'document');
-  res.setHeader('Sec-Fetch-Mode', req.get('Sec-Fetch-Mode') || 'navigate');
-  res.setHeader('Sec-Fetch-Site', req.get('Sec-Fetch-Site') || 'same-origin');
-  res.setHeader('Sec-Fetch-User', req.get('Sec-Fetch-User') || '?1');
-
   next();
 });
 
 // ----------------------
-// HELMET ENHANCEMENTS
+// SEC-FETCH HEADERS (Response defaults for ZAP)
 // ----------------------
-app.use(helmet({
-  crossOriginEmbedderPolicy: true,
-  crossOriginOpenerPolicy: { policy: 'same-origin' },
-  frameguard: { action: 'deny' },
-  referrerPolicy: { policy: 'no-referrer' },
-  noSniff: true
-}));
+app.use((req, res, next) => {
+  res.setHeader('Sec-Fetch-Dest', 'document');
+  res.setHeader('Sec-Fetch-Mode', 'navigate');
+  res.setHeader('Sec-Fetch-Site', 'same-origin');
+  res.setHeader('Sec-Fetch-User', '?1');
+  next();
+});
 
 // ----------------------
 // SAFE FILE ACCESS
@@ -80,11 +105,8 @@ const BASE_DIR = path.resolve(__dirname, 'files');
 function resolveSafe(baseDir, userInput) {
   if (!userInput) throw new Error('Filename is required');
 
-  try {
-    userInput = decodeURIComponent(userInput);
-  } catch (e) {
-    throw new Error('Invalid encoding in filename');
-  }
+  try { userInput = decodeURIComponent(userInput); } 
+  catch (e) { throw new Error('Invalid encoding in filename'); }
 
   const normalizedInput = path.normalize(userInput).replace(/^(\.\.(\/|\\|$))+/g, '');
   const resolvedPath = path.resolve(baseDir, normalizedInput);
@@ -98,54 +120,26 @@ function resolveSafe(baseDir, userInput) {
 }
 
 // ----------------------
-// SERVE FILES
+// FILE SERVING ENDPOINT
 // ----------------------
 app.get('/files/*', (req, res) => {
   let filePath;
-  try {
-    filePath = resolveSafe(BASE_DIR, req.params[0]);
-  } catch (err) {
-    return res.status(400).send(err.message);
-  }
+  try { filePath = resolveSafe(BASE_DIR, req.params[0]); } 
+  catch (err) { return res.status(400).send(err.message); }
 
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).send('File not found');
-  }
+  if (!fs.existsSync(filePath)) return res.status(404).send('File not found');
 
-  // Hide raw timestamps
-  const stats = fs.statSync(filePath);
-  res.setHeader('Last-Modified', stats.mtime.toISOString());
+  // Avoid raw timestamps / info leakage
+  res.setHeader('Last-Modified', new Date().toISOString());
 
+  // Send file
   res.sendFile(filePath);
 });
 
 // ----------------------
-// SERVE STATIC FILES (robots.txt, sitemap.xml)
-// ----------------------
-app.use(express.static(BASE_DIR, {
-  setHeaders: (res, path) => {
-    res.removeHeader('X-Powered-By');
-    res.setHeader('Content-Security-Policy', CSP_HEADER);
-    res.setHeader('Permissions-Policy', PERMISSIONS_POLICY_HEADER);
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
-    res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
-    res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
-
-    if (path.endsWith('robots.txt') || path.endsWith('sitemap.xml')) {
-      res.setHeader('Cache-Control', 'public, max-age=3600, immutable');
-    } else {
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
-    }
-  }
-}));
-
-// ----------------------
-// START SERVER
+// START SERVER (HTTPS)
 // ----------------------
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`Secure file server running on port ${PORT}`);
+https.createServer(options, app).listen(PORT, () => {
+  console.log(`Secure HTTPS file server running on port ${PORT}`);
 });

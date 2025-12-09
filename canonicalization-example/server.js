@@ -8,13 +8,13 @@ const app = express();
 app.use(express.json());
 
 // ----------------------
-// SECURITY HEADERS
+// REMOVE X-POWERED-BY
 // ----------------------
-
-// Remove X-Powered-By completely
 app.disable('x-powered-by');
 
-// Helmet defaults + HSTS + other protections
+// ----------------------
+// HELMET SECURITY HEADERS
+// ----------------------
 app.use(
   helmet({
     crossOriginEmbedderPolicy: true,
@@ -27,41 +27,24 @@ app.use(
   })
 );
 
-// Canonical CSP
-app.use((req, res, next) => {
-  res.setHeader(
-    'Content-Security-Policy',
-    "default-src 'none'; " +
-      "script-src 'self'; " +
-      "style-src 'self'; " +
-      "img-src 'self' data:; " +
-      "connect-src 'self'; " +
-      "font-src 'self'; " +
-      "object-src 'none'; " +
-      "frame-ancestors 'none'; " +
-      "form-action 'self'; " +
-      "base-uri 'self'; " +
-      "worker-src 'self'; " +
-      "manifest-src 'self'; " +
-      "frame-src 'none'; " +
-      "report-uri /csp-report"
-  );
-  next();
-});
-
-// Permissions Policy (Feature Policy)
-app.use((req, res, next) => {
-  res.setHeader(
-    'Permissions-Policy',
-    'camera=(), microphone=(), geolocation=(), fullscreen=(self), payment=()'
-  );
-  next();
-});
-
 // ----------------------
-// CACHE CONTROL
+// GLOBAL HEADERS
 // ----------------------
+const cspHeader =
+  "default-src 'none'; " +
+  "script-src 'self'; style-src 'self'; img-src 'self' data:; " +
+  "connect-src 'self'; font-src 'self'; object-src 'none'; " +
+  "frame-ancestors 'none'; form-action 'self'; base-uri 'self'; " +
+  "worker-src 'self'; manifest-src 'self'; frame-src 'none'";
+
+const permissionsPolicyHeader =
+  'camera=(), microphone=(), geolocation=(), fullscreen=(self), payment=()';
+
 app.use((req, res, next) => {
+  res.setHeader('Content-Security-Policy', cspHeader);
+  res.setHeader('Permissions-Policy', permissionsPolicyHeader);
+
+  // Cache control
   if (req.path.endsWith('robots.txt') || req.path.endsWith('sitemap.xml')) {
     res.set('Cache-Control', 'public, max-age=3600, immutable');
   } else {
@@ -69,6 +52,7 @@ app.use((req, res, next) => {
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
   }
+
   next();
 });
 
@@ -77,10 +61,6 @@ app.use((req, res, next) => {
 // ----------------------
 app.use((req, res, next) => {
   const site = req.get('Sec-Fetch-Site');
-  const mode = req.get('Sec-Fetch-Mode');
-  const dest = req.get('Sec-Fetch-Dest');
-
-  // Only block cross-origin requests from browsers
   if (site && site !== 'same-origin' && site !== 'same-site') {
     console.warn(`Blocked request: ${req.method} ${req.originalUrl} from ${site}`);
     return res.status(400).send('Blocked by Fetch Metadata policy');
@@ -106,19 +86,13 @@ function resolveSafe(baseDir, userInput) {
   const resolvedPath = path.resolve(baseDir, normalizedInput);
   const relative = path.relative(baseDir, resolvedPath);
 
-  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+  if (relative.startsWith('..') || path.isAbsolute(relative) || !resolvedPath.startsWith(baseDir)) {
     throw new Error('Path traversal attempt detected');
-  }
-
-  // Prevent symlink escape
-  if (!resolvedPath.startsWith(baseDir)) {
-    throw new Error('Path traversal attempt via symlink detected');
   }
 
   return resolvedPath;
 }
 
-// POST /read - secure file read
 app.post('/read', (req, res) => {
   const filename = req.body.filename;
 
@@ -141,13 +115,21 @@ app.post('/read', (req, res) => {
   }
 });
 
-// Serve static files securely
+// ----------------------
+// SERVE STATIC FILES SECURELY
+// ----------------------
 app.use(
   '/files',
   express.static(BASE_DIR, {
     etag: false,
     lastModified: false,
     setHeaders: (res, filePath) => {
+      // Security headers
+      res.setHeader('Content-Security-Policy', cspHeader);
+      res.setHeader('Permissions-Policy', permissionsPolicyHeader);
+      res.removeHeader('X-Powered-By');
+
+      // Cache control
       if (filePath.endsWith('robots.txt') || filePath.endsWith('sitemap.xml')) {
         res.set('Cache-Control', 'public, max-age=3600, immutable');
       } else {

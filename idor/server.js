@@ -1,3 +1,4 @@
+// server.js
 const express = require("express");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
@@ -10,41 +11,50 @@ app.use(express.json());
 // ----------------------
 app.disable("x-powered-by"); // remove X-Powered-By
 
-app.use(helmet()); // default secure headers
+// Helmet defaults + enhancements
+app.use(helmet());
 
 // Strong CSP
 app.use(
   helmet.contentSecurityPolicy({
+    useDefaults: false,
     directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'"],
-      imgSrc: ["'self'", "data:"],
-      connectSrc: ["'self'"],
-      fontSrc: ["'self'"],
-      objectSrc: ["'none'"],
-      frameAncestors: ["'none'"],
-      formAction: ["'self'"],
-      baseUri: ["'self'"],
-      workerSrc: ["'self'"],
-      manifestSrc: ["'self'"],
-    },
+      "default-src": ["'none'"],
+      "script-src": ["'self'"],
+      "style-src": ["'self'"],
+      "img-src": ["'self'", "data:"],
+      "connect-src": ["'self'"],
+      "font-src": ["'self'"],
+      "object-src": ["'none'"],
+      "frame-ancestors": ["'none'"],
+      "form-action": ["'self'"],
+      "base-uri": ["'self'"],
+      "worker-src": ["'self'"],
+      "manifest-src": ["'self'"],
+      "frame-src": ["'none'"]
+    }
   })
 );
 
-// Permissions Policy via Helmet
-app.use(
-  helmet.permissionsPolicy({
-    features: {
-      geolocation: ["'none'"],
-      camera: ["'none'"],
-      microphone: ["'none'"],
-      fullscreen: ["'self'"],
-    },
-  })
-);
+// Permissions Policy
+app.use((req, res, next) => {
+  res.setHeader(
+    "Permissions-Policy",
+    "geolocation=(), camera=(), microphone=(), fullscreen=(self), payment=()"
+  );
+  next();
+});
 
-// Prevent caching of sensitive responses
+// Sec-Fetch headers defaults
+app.use((req, res, next) => {
+  res.setHeader("Sec-Fetch-Dest", "document");
+  res.setHeader("Sec-Fetch-Mode", "navigate");
+  res.setHeader("Sec-Fetch-Site", "same-origin");
+  res.setHeader("Sec-Fetch-User", "?1");
+  next();
+});
+
+// Prevent caching
 app.use((req, res, next) => {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
   res.setHeader("Pragma", "no-cache");
@@ -110,7 +120,7 @@ app.get("/orders/:id", (req, res) => {
 
   const user = req.user;
 
-  // Role/ownership checks
+  // IDOR / access checks
   if (user.role === "customer" && order.userId !== user.id)
     return res.status(403).json({ error: "Forbidden: not your order" });
 

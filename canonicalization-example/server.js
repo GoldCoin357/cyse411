@@ -8,18 +8,14 @@ const https = require("https");
 
 const app = express();
 
-// ---------------------
-// 1. Global Security Middleware
-// ---------------------
+
 app.disable("x-powered-by"); // remove Express header
 
 app.use((req, res, next) => {
   // Remove X-Powered-By again to be sure
   res.removeHeader("X-Powered-By");
 
-  // ---------------------
-  // 2. Strong CSP
-  // ---------------------
+
   const csp = `
     default-src 'none';
     script-src 'self';
@@ -37,23 +33,16 @@ app.use((req, res, next) => {
   `;
   res.setHeader("Content-Security-Policy", csp.replace(/\s+/g, " ").trim());
 
-  // ---------------------
-  // 3. Permissions Policy
-  // ---------------------
+
   res.setHeader(
     "Permissions-Policy",
     "camera=(), microphone=(), geolocation=(), fullscreen=(), payment=()"
   );
 
-  // ---------------------
-  // 4. Cross-Origin
-  // ---------------------
+
   res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
   res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
 
-  // ---------------------
-  // 5. Cache-Control
-  // ---------------------
   if (req.path.endsWith("robots.txt") || req.path.endsWith("sitemap.xml")) {
     res.setHeader("Cache-Control", "public, max-age=3600, immutable");
   } else {
@@ -68,9 +57,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// ---------------------
-// 6. Helmet Enhancements
-// ---------------------
+
 app.use(
   helmet({
     crossOriginEmbedderPolicy: true,
@@ -81,9 +68,7 @@ app.use(
   })
 );
 
-// ---------------------
-// 7. Rate Limiting
-// ---------------------
+
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -92,21 +77,15 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// ---------------------
-// 8. Serve Static Files (public folder)
-// ---------------------
+
 app.use(express.static(path.join(__dirname, "public")));
 
-// ---------------------
-// 9. Default Route
-// ---------------------
+
 app.get("/", (req, res) => {
   res.send("Secure HTTPS server running.");
 });
 
-// ---------------------
-// 10. HTTPS Setup
-// ---------------------
+
 const options = {
   key: fs.readFileSync(path.join(__dirname, "certs", "key.pem")),
   cert: fs.readFileSync(path.join(__dirname, "certs", "cert.pem")),

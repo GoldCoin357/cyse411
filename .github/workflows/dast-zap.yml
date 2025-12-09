@@ -42,7 +42,6 @@ jobs:
           npm start &
           SERVER_PID=$!
           echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
-          echo "Waiting for backend to be ready..."
           for i in {1..20}; do
             if curl -s http://localhost:4000; then
               echo "✅ Backend is up!"
@@ -64,13 +63,7 @@ jobs:
           allow_issue_writing: false
           fail_action: false
 
-      # 6️⃣ Upload SARIF to GitHub Security tab
-      - name: Upload ZAP SARIF
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: report_json.json
-
-      # 7️⃣ Upload HTML/JSON artifacts for manual review
+      # 6️⃣ Upload ZAP Report (HTML/JSON artifacts)
       - name: Upload ZAP Report
         uses: actions/upload-artifact@v4
         if: always()
@@ -81,7 +74,7 @@ jobs:
             report_json.json
           retention-days: 30
 
-      # 8️⃣ Cleanup backend server
+      # 7️⃣ Cleanup backend server
       - name: Cleanup
         if: always()
         run: |

@@ -43,8 +43,9 @@ app.use((req, res, next) => {
   // HSTS for HTTPS
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
 
-  // CORS / Cross-Origin Resource Policy
+  // Cross-Origin isolation
   res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
 
   // Cache control
   if (req.path.endsWith('robots.txt') || req.path.endsWith('sitemap.xml')) {
@@ -117,6 +118,10 @@ app.get('/files/*', (req, res) => {
   if (!fs.existsSync(filePath)) {
     return res.status(404).send('File not found');
   }
+
+  // Avoid leaking raw timestamps
+  const stats = fs.statSync(filePath);
+  res.setHeader('Last-Modified', stats.mtime.toISOString());
 
   res.sendFile(filePath);
 });

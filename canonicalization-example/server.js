@@ -1,9 +1,45 @@
 const path = require('path');
 const fs = require('fs');
 const express = require('express');
-const app = express();
+const helmet = require('helmet');
 
+const app = express();
 app.use(express.json());
+
+// Add security headers
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'"],
+        imgSrc: ["'self'"],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'none'"]
+      }
+    },
+    permissionsPolicy: {
+      features: {
+        geolocation: ["'none'"],
+        camera: ["'none'"],
+        microphone: ["'none'"]
+      }
+    },
+    hidePoweredBy: true
+  })
+);
+
+// Prevent caching sensitive responses
+app.use((req, res, next) => {
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate, private');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  next();
+});
 
 const BASE_DIR = path.resolve(__dirname, 'files');
 
@@ -14,16 +50,13 @@ function resolveSafe(baseDir, userInput) {
     // Ignore invalid encoding
   }
 
-  // Normalize user input and block ".." patterns
   const normalizedInput = path
     .normalize(userInput)
-    .replace(/^(\.\.(\/|\\|$))+/, '');
+    .replace(/^(\.\.(\/|\\|$))+/g, '');
 
-  // Resolve final absolute path
   const resolvedPath = path.resolve(baseDir, normalizedInput);
-
-  // Validate using path.relative() (safest method)
   const relative = path.relative(baseDir, resolvedPath);
+
   if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new Error('Path traversal attempt detected');
   }
@@ -36,4 +69,24 @@ app.post('/read', (req, res) => {
   let safePath;
 
   try {
-    safePa
+    safePath = resolveSafe(BASE_DIR, filename);
+  } catch (err) {
+    return res.status(403).json({ error: err.message });
+  }
+
+  if (!fs.existsSync(safePath)) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+
+  try {
+    const content = fs.readFileSync(safePath, 'utf8');
+    res.json({ path: safePath, content });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to read file' });
+  }
+});
+
+const PORT = 4000;
+app.listen(PORT, () => {
+  console.log(`Secure file server running on http://localhost:${PORT}`);
+});

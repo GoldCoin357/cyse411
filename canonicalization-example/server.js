@@ -1,145 +1,115 @@
-const fs = require('fs');
-const path = require('path');
-const express = require('express');
-const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
-const https = require('https');
-
-// ----------------------
-// HTTPS CONFIG (Self-signed for local testing)
-// ----------------------
-const options = {
-  key: fs.readFileSync(path.join(__dirname, 'certs', 'key.pem')),
-  cert: fs.readFileSync(path.join(__dirname, 'certs', 'cert.pem'))
-};
+// server.js
+const express = require("express");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+const path = require("path");
+const fs = require("fs");
+const https = require("https");
 
 const app = express();
-app.use(express.json());
 
-// ----------------------
-// RATE LIMITING
-// ----------------------
-app.use(rateLimit({
+// -------------------------
+// 1. Remove X-Powered-By
+// -------------------------
+app.disable("x-powered-by");
+
+// -------------------------
+// 2. Apply Helmet + Secure Headers
+// -------------------------
+app.use(helmet());
+
+// Strong CSP required by ZAP
+app.use(
+  helmet.contentSecurityPolicy({
+    useDefaults: false,
+    directives: {
+      "default-src": ["'none'"],
+      "script-src": ["'self'"],
+      "style-src": ["'self'"],
+      "img-src": ["'self'"],
+      "connect-src": ["'self'"],
+      "font-src": ["'self'"],
+      "frame-ancestors": ["'none'"],
+      "base-uri": ["'none'"],
+      "form-action": ["'self'"],
+      "manifest-src": ["'self'"]
+    }
+  })
+);
+
+// -------------------------
+// 3. Rate Limiting
+// -------------------------
+const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
   standardHeaders: true,
-  legacyHeaders: false
-}));
+  legacyHeaders: false,
+});
+app.use(limiter);
 
-// ----------------------
-// HELMET SECURITY HEADERS
-// ----------------------
-app.use(helmet());
-
-// CSP
-app.use(
-  helmet.contentSecurityPolicy({
-    directives: {
-      defaultSrc: ["'none'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'"],
-      imgSrc: ["'self'", "data:"],
-      connectSrc: ["'self'"],
-      fontSrc: ["'self'"],
-      objectSrc: ["'none'"],
-      frameAncestors: ["'none'"],
-      formAction: ["'self'"],
-      baseUri: ["'self'"],
-      workerSrc: ["'self'"],
-      manifestSrc: ["'self'"],
-      frameSrc: ["'none'"]
-    }
-  })
-);
-
-// Permissions Policy
-app.use(
-  helmet.permissionsPolicy({
-    features: {
-      camera: [],
-      microphone: [],
-      geolocation: [],
-      fullscreen: ["'self'"],
-      payment: []
-    }
-  })
-);
-
-// Cross-Origin
+// -------------------------
+// 4. Force No Cache
+// -------------------------
 app.use((req, res, next) => {
-  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
-  res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
   next();
 });
 
-// ----------------------
-// CACHE CONTROL
-// ----------------------
-app.use((req, res, next) => {
-  if (req.path.endsWith('robots.txt') || req.path.endsWith('sitemap.xml')) {
-    res.setHeader('Cache-Control', 'public, max-age=3600, immutable');
-  } else {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
+// -------------------------------------------
+// 5. Safe File Path Resolver
+// -------------------------------------------
+function safeResolve(base, target) {
+  const targetPath = path.normalize(path.join(base, target));
+  if (!targetPath.startsWith(base)) {
+    throw new Error("Invalid path");
   }
-  next();
-});
-
-// ----------------------
-// SEC-FETCH HEADERS (Response defaults for ZAP)
-// ----------------------
-app.use((req, res, next) => {
-  res.setHeader('Sec-Fetch-Dest', 'document');
-  res.setHeader('Sec-Fetch-Mode', 'navigate');
-  res.setHeader('Sec-Fetch-Site', 'same-origin');
-  res.setHeader('Sec-Fetch-User', '?1');
-  next();
-});
-
-// ----------------------
-// SAFE FILE ACCESS
-// ----------------------
-const BASE_DIR = path.resolve(__dirname, 'files');
-
-function resolveSafe(baseDir, userInput) {
-  if (!userInput) throw new Error('Filename is required');
-
-  try { userInput = decodeURIComponent(userInput); } 
-  catch (e) { throw new Error('Invalid encoding in filename'); }
-
-  const normalizedInput = path.normalize(userInput).replace(/^(\.\.(\/|\\|$))+/g, '');
-  const resolvedPath = path.resolve(baseDir, normalizedInput);
-  const relative = path.relative(baseDir, resolvedPath);
-
-  if (relative.startsWith('..') || !resolvedPath.startsWith(baseDir)) {
-    throw new Error('Access denied');
-  }
-
-  return resolvedPath;
+  return targetPath;
 }
 
-// ----------------------
-// FILE SERVING ENDPOINT
-// ----------------------
-app.get('/files/*', (req, res) => {
-  let filePath;
-  try { filePath = resolveSafe(BASE_DIR, req.params[0]); } 
-  catch (err) { return res.status(400).send(err.message); }
+// -------------------------------------------
+// 6. Secure File Download Route
+// -------------------------------------------
+app.get("/files/:name", (req, res) => {
+  try {
+    const filePath = safeResolve(path.join(__dirname, "files"), req.params.name);
 
-  if (!fs.existsSync(filePath)) return res.status(404).send('File not found');
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: "File not found" });
+    }
 
-  // Avoid raw timestamps / info leakage
-  res.setHeader('Last-Modified', new Date().toISOString());
-
-  // Send file
-  res.sendFile(filePath);
+    res.download(filePath);
+  } catch (err) {
+    res.status(400).json({ error: "Invalid request" });
+  }
 });
 
-// ----------------------
-// START SERVER (HTTPS)
-// ----------------------
-const PORT = process.env.PORT || 4000;
+// -------------------------------------------
+// 7. Static Files
+// -------------------------------------------
+app.use(express.static("public", {
+  extensions: ["html"]
+}));
+
+// -------------------------------------------
+// 8. Default Route
+// -------------------------------------------
+app.get("/", (req, res) => {
+  res.send("Secure HTTPS server is running.");
+});
+
+// -------------------------------------------
+// 9. HTTPS Setup (THE ONLY NEW THING)
+// -------------------------------------------
+const options = {
+  key: fs.readFileSync(path.join(__dirname, "certs", "key.pem")),
+  cert: fs.readFileSync(path.join(__dirname, "certs", "cert.pem"))
+};
+
+const PORT = process.env.PORT || 3000;
+
 https.createServer(options, app).listen(PORT, () => {
-  console.log(`Secure HTTPS file server running on port ${PORT}`);
+  console.log(`Secure HTTPS server running on port ${PORT}`);
 });

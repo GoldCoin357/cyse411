@@ -11,12 +11,8 @@ app.use(express.json());
 // SECURITY HEADERS
 // ----------------------
 
-// Remove X-Powered-By immediately
+// Remove X-Powered-By completely
 app.disable('x-powered-by');
-app.use((req, res, next) => {
-  res.removeHeader('X-Powered-By');
-  next();
-});
 
 // Helmet defaults + HSTS + other protections
 app.use(
@@ -43,39 +39,28 @@ app.use((req, res, next) => {
       "font-src 'self'; " +
       "object-src 'none'; " +
       "frame-ancestors 'none'; " +
-      "form-action 'none'; " +
-      "base-uri 'none'; " +
+      "form-action 'self'; " +
+      "base-uri 'self'; " +
       "worker-src 'self'; " +
       "manifest-src 'self'; " +
-      "child-src 'none'; " +
-      "frame-src 'none'"
+      "frame-src 'none'; " +
+      "report-uri /csp-report"
   );
   next();
 });
 
-// Permissions Policy (canonical form)
-app.use(
-  helmet.permissionsPolicy({
-    policy: {
-      accelerometer: [],
-      autoplay: [],
-      camera: [],
-      encryptedMedia: [],
-      fullscreen: ["self"],
-      geolocation: [],
-      gyroscope: [],
-      magnetometer: [],
-      microphone: [],
-      payment: [],
-      usb: [],
-      speaker: [],
-      vr: [],
-      interestCohort: [],
-    },
-  })
-);
+// Permissions Policy (Feature Policy)
+app.use((req, res, next) => {
+  res.setHeader(
+    'Permissions-Policy',
+    'camera=(), microphone=(), geolocation=(), fullscreen=(self), payment=()'
+  );
+  next();
+});
 
-// Cache-control: no-store for HTML, allow robots/sitemap caching
+// ----------------------
+// CACHE CONTROL
+// ----------------------
 app.use((req, res, next) => {
   if (req.path.endsWith('robots.txt') || req.path.endsWith('sitemap.xml')) {
     res.set('Cache-Control', 'public, max-age=3600, immutable');
@@ -87,16 +72,16 @@ app.use((req, res, next) => {
   next();
 });
 
-// Fetch Metadata protection
+// ----------------------
+// FETCH METADATA PROTECTION
+// ----------------------
 app.use((req, res, next) => {
   const site = req.get('Sec-Fetch-Site');
   const mode = req.get('Sec-Fetch-Mode');
   const dest = req.get('Sec-Fetch-Dest');
 
-  const isSameOrigin = site === 'same-origin' || site === 'same-site';
-  const isTopNav = mode === 'navigate' && dest === 'document';
-
-  if (site && !isSameOrigin && !isTopNav) {
+  // Only block cross-origin requests from browsers
+  if (site && site !== 'same-origin' && site !== 'same-site') {
     console.warn(`Blocked request: ${req.method} ${req.originalUrl} from ${site}`);
     return res.status(400).send('Blocked by Fetch Metadata policy');
   }
@@ -125,9 +110,15 @@ function resolveSafe(baseDir, userInput) {
     throw new Error('Path traversal attempt detected');
   }
 
+  // Prevent symlink escape
+  if (!resolvedPath.startsWith(baseDir)) {
+    throw new Error('Path traversal attempt via symlink detected');
+  }
+
   return resolvedPath;
 }
 
+// POST /read - secure file read
 app.post('/read', (req, res) => {
   const filename = req.body.filename;
 
@@ -167,6 +158,14 @@ app.use(
     },
   })
 );
+
+// ----------------------
+// CSP REPORT ENDPOINT
+// ----------------------
+app.post('/csp-report', express.json({ type: ['application/csp-report'] }), (req, res) => {
+  console.log('CSP Violation:', req.body);
+  res.status(204).send();
+});
 
 // ----------------------
 // START SERVER

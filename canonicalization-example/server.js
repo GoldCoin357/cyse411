@@ -18,14 +18,16 @@ app.use((req, res, next) => {
   next();
 });
 
-// Helmet defaults + HSTS
+// Helmet defaults + HSTS + other protections
 app.use(
   helmet({
     crossOriginEmbedderPolicy: true,
     crossOriginOpenerPolicy: true,
     crossOriginResourcePolicy: { policy: 'same-origin' },
     referrerPolicy: { policy: 'no-referrer' },
-    hsts: { maxAge: 31536000, includeSubDomains: true },
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+    noSniff: true,
+    frameguard: { action: 'deny' },
   })
 );
 
@@ -76,7 +78,7 @@ app.use(
 // Cache-control: no-store for HTML, allow robots/sitemap caching
 app.use((req, res, next) => {
   if (req.path.endsWith('robots.txt') || req.path.endsWith('sitemap.xml')) {
-    res.set('Cache-Control', 'public, max-age=3600');
+    res.set('Cache-Control', 'public, max-age=3600, immutable');
   } else {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.set('Pragma', 'no-cache');
@@ -95,6 +97,7 @@ app.use((req, res, next) => {
   const isTopNav = mode === 'navigate' && dest === 'document';
 
   if (site && !isSameOrigin && !isTopNav) {
+    console.warn(`Blocked request: ${req.method} ${req.originalUrl} from ${site}`);
     return res.status(400).send('Blocked by Fetch Metadata policy');
   }
   next();
@@ -155,7 +158,7 @@ app.use(
     lastModified: false,
     setHeaders: (res, filePath) => {
       if (filePath.endsWith('robots.txt') || filePath.endsWith('sitemap.xml')) {
-        res.set('Cache-Control', 'public, max-age=3600');
+        res.set('Cache-Control', 'public, max-age=3600, immutable');
       } else {
         res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
         res.set('Pragma', 'no-cache');

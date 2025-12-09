@@ -6,15 +6,13 @@ const rateLimit = require("express-rate-limit");
 const app = express();
 app.use(express.json());
 
-// ----------------------
-// SECURITY HEADERS
-// ----------------------
+
 app.disable("x-powered-by"); // remove X-Powered-By
 
-// Helmet defaults + enhancements
+
 app.use(helmet());
 
-// Strong CSP
+
 app.use(
   helmet.contentSecurityPolicy({
     useDefaults: false,
@@ -36,7 +34,7 @@ app.use(
   })
 );
 
-// Permissions Policy
+
 app.use((req, res, next) => {
   res.setHeader(
     "Permissions-Policy",
@@ -45,7 +43,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Sec-Fetch headers defaults
+
 app.use((req, res, next) => {
   res.setHeader("Sec-Fetch-Dest", "document");
   res.setHeader("Sec-Fetch-Mode", "navigate");
@@ -54,7 +52,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Prevent caching
+
 app.use((req, res, next) => {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
   res.setHeader("Pragma", "no-cache");
@@ -62,9 +60,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// ----------------------
-// RATE LIMITING
-// ----------------------
+
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -73,9 +69,7 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// ----------------------
-// FAKE "DATABASE"
-// ----------------------
+
 const users = [
   { id: 1, name: "Alice", role: "customer", department: "north" },
   { id: 2, name: "Bob", role: "customer", department: "south" },
@@ -89,16 +83,13 @@ const orders = [
   { id: 4, userId: 2, item: "Keyboard", region: "south", total: 60 },
 ];
 
-// Demo token authentication
+
 const DEMO_TOKENS = {
   "token-alice": 1,
   "token-bob": 2,
   "token-charlie": 3,
 };
 
-// ----------------------
-// AUTH MIDDLEWARE
-// ----------------------
 function auth(req, res, next) {
   const token = req.header("Authorization")?.replace("Bearer ", "");
   const userId = DEMO_TOKENS[token];
@@ -110,9 +101,7 @@ function auth(req, res, next) {
 
 app.use(auth);
 
-// ----------------------
-// ORDERS ENDPOINT
-// ----------------------
+
 app.get("/orders/:id", (req, res) => {
   const orderId = parseInt(req.params.id, 10);
   const order = orders.find((o) => o.id === orderId);
@@ -120,7 +109,7 @@ app.get("/orders/:id", (req, res) => {
 
   const user = req.user;
 
-  // IDOR / access checks
+
   if (user.role === "customer" && order.userId !== user.id)
     return res.status(403).json({ error: "Forbidden: not your order" });
 
@@ -130,13 +119,11 @@ app.get("/orders/:id", (req, res) => {
   res.json(order);
 });
 
-// Health check
+
 app.get("/", (req, res) => {
   res.json({ message: "Secure Orders API", currentUser: req.user.name });
 });
 
-// ----------------------
-// START SERVER
-// ----------------------
+
 const PORT = 3000;
 app.listen(PORT, () => console.log(`Secure API running at http://localhost:${PORT}`));

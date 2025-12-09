@@ -1,12 +1,55 @@
+
+// secure-orders-api.js
 const express = require("express");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 
 const app = express();
 app.use(express.json());
-app.use(helmet()); // Secure headers
 
-// Rate limiter for all requests
+// ---------- Security Headers ----------
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'"],
+        imgSrc: ["'self'"],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        formAction: ["'self'"],
+      },
+    },
+    crossOriginEmbedderPolicy: true,
+    crossOriginOpenerPolicy: true,
+    crossOriginResourcePolicy: { policy: "same-origin" },
+    referrerPolicy: { policy: "no-referrer" },
+    hsts: { maxAge: 31536000, includeSubDomains: true },
+    hidePoweredBy: true,
+  })
+);
+
+// Permissions Policy header
+app.use((req, res, next) => {
+  res.setHeader(
+    "Permissions-Policy",
+    "geolocation=(), microphone=(), camera=(), fullscreen=(self)"
+  );
+  next();
+});
+
+// Prevent caching sensitive responses
+app.use((req, res, next) => {
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate, private");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  next();
+});
+
+// ---------- Rate Limiting ----------
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -15,7 +58,7 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// Fake "database"
+// ---------- Fake "Database" ----------
 const users = [
   { id: 1, name: "Alice", role: "customer", department: "north" },
   { id: 2, name: "Bob", role: "customer", department: "south" },
@@ -36,7 +79,7 @@ const DEMO_TOKENS = {
   "token-charlie": 3,
 };
 
-// Auth middleware
+// ---------- Authentication Middleware ----------
 function auth(req, res, next) {
   const token = req.header("Authorization")?.replace("Bearer ", "");
   const userId = DEMO_TOKENS[token];
@@ -49,7 +92,7 @@ function auth(req, res, next) {
 
 app.use(auth);
 
-// Secure orders endpoint
+// ---------- Secure Orders Endpoint ----------
 app.get("/orders/:id", (req, res) => {
   const orderId = parseInt(req.params.id, 10);
   const order = orders.find((o) => o.id === orderId);
@@ -72,6 +115,6 @@ app.get("/", (req, res) => {
   res.json({ message: "Secure Orders API", currentUser: req.user.name });
 });
 
-// Start server
+// ---------- Start Server ----------
 const PORT = 3000;
 app.listen(PORT, () => console.log(`Secure API running at http://localhost:${PORT}`));

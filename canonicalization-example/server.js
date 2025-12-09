@@ -6,7 +6,7 @@ const helmet = require('helmet');
 const app = express();
 app.use(express.json());
 
-// Add security headers
+// ---------- Security Headers ----------
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -18,18 +18,25 @@ app.use(
         connectSrc: ["'self'"],
         fontSrc: ["'self'"],
         objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
         formAction: ["'self'"],
-        frameAncestors: ["'none'"]
+        baseUri: ["'self'"],
+        workerSrc: ["'self'"],
+        manifestSrc: ["'self'"]
       }
     },
     permissionsPolicy: {
       features: {
         geolocation: ["'none'"],
         camera: ["'none'"],
-        microphone: ["'none'"]
+        microphone: ["'none'"],
+        fullscreen: ["'none'"],
+        payment: ["'none'"],
+        usb: ["'none'"],
+        speaker: ["'none'"]
       }
     },
-    hidePoweredBy: true
+    hidePoweredBy: true // removes X-Powered-By
   })
 );
 
@@ -41,14 +48,13 @@ app.use((req, res, next) => {
   next();
 });
 
+// ---------- Safe File Access ----------
 const BASE_DIR = path.resolve(__dirname, 'files');
 
 function resolveSafe(baseDir, userInput) {
   try {
     userInput = decodeURIComponent(userInput);
-  } catch (e) {
-    // Ignore invalid encoding
-  }
+  } catch (e) {}
 
   const normalizedInput = path
     .normalize(userInput)
@@ -86,6 +92,7 @@ app.post('/read', (req, res) => {
   }
 });
 
+// ---------- Startup ----------
 const PORT = 4000;
 app.listen(PORT, () => {
   console.log(`Secure file server running on http://localhost:${PORT}`);

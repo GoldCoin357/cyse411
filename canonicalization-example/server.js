@@ -1,3 +1,4 @@
+// secure-file-server.js
 const path = require('path');
 const fs = require('fs');
 const express = require('express');
@@ -10,11 +11,19 @@ app.use(express.json());
 // SECURITY HEADERS
 // ----------------------
 
-// Remove X-Powered-By completely
+// Remove X-Powered-By
 app.disable('x-powered-by');
 
-// Enable secure headers
-app.use(helmet()); // sets multiple secure headers (HSTS, X-Frame-Options, etc.)
+// Helmet default headers + HSTS
+app.use(
+  helmet({
+    crossOriginEmbedderPolicy: true,
+    crossOriginOpenerPolicy: true,
+    crossOriginResourcePolicy: { policy: 'same-origin' },
+    referrerPolicy: { policy: 'no-referrer' },
+    hsts: { maxAge: 31536000, includeSubDomains: true },
+  })
+);
 
 // Strong CSP
 app.use(
@@ -31,27 +40,36 @@ app.use(
       formAction: ["'self'"],
       baseUri: ["'self'"],
       workerSrc: ["'self'"],
-      manifestSrc: ["'self'"]
-    }
+      manifestSrc: ["'self'"],
+      childSrc: ["'none'"],       // fallback for frames
+      frameSrc: ["'none'"],       // fallback for frames
+    },
   })
 );
 
-// Permissions Policy (new name for Feature-Policy)
+// Complete Permissions Policy
 app.use(
   helmet.permissionsPolicy({
     features: {
-      geolocation: ["'none'"],
+      accelerometer: ["'none'"],
+      autoplay: ["'none'"],
       camera: ["'none'"],
-      microphone: ["'none'"],
+      encryptedMedia: ["'none'"],
       fullscreen: ["'self'"],
+      geolocation: ["'none'"],
+      gyroscope: ["'none'"],
+      magnetometer: ["'none'"],
+      microphone: ["'none'"],
       payment: ["'none'"],
       usb: ["'none'"],
-      speaker: ["'none'"]
-    }
+      speaker: ["'none'"],
+      vr: ["'none'"],
+      interestCohort: ["'none'"],
+    },
   })
 );
 
-// Prevent caching of sensitive content
+// Prevent caching of all responses
 app.use((req, res, next) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.set('Pragma', 'no-cache');
@@ -62,7 +80,6 @@ app.use((req, res, next) => {
 // ----------------------
 // SAFE FILE ACCESS
 // ----------------------
-
 const BASE_DIR = path.resolve(__dirname, 'files');
 
 function resolveSafe(baseDir, userInput) {
@@ -76,8 +93,8 @@ function resolveSafe(baseDir, userInput) {
 
   const normalizedInput = path.normalize(userInput).replace(/^(\.\.(\/|\\|$))+/g, '');
   const resolvedPath = path.resolve(baseDir, normalizedInput);
-
   const relative = path.relative(baseDir, resolvedPath);
+
   if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new Error('Path traversal attempt detected');
   }
@@ -106,6 +123,20 @@ app.post('/read', (req, res) => {
     res.status(500).json({ error: 'Failed to read file' });
   }
 });
+
+// Serve static files securely with no caching
+app.use(
+  '/files',
+  express.static(BASE_DIR, {
+    etag: false,
+    lastModified: false,
+    setHeaders: (res, filePath) => {
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.set('Pragma', 'no-cache');
+      res.set('Expires', '0');
+    },
+  })
+);
 
 // ----------------------
 // START SERVER

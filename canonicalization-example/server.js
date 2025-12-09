@@ -1,4 +1,3 @@
-// secure-file-server.js
 const path = require('path');
 const fs = require('fs');
 const express = require('express');
@@ -13,7 +12,7 @@ app.use(express.json());
 // ----------------------
 app.use(rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // max requests per IP per window
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false
 }));
@@ -35,15 +34,11 @@ app.use((req, res, next) => {
   // Remove X-Powered-By
   res.removeHeader('X-Powered-By');
 
-  // Set security headers
+  // Security headers
   res.setHeader('Content-Security-Policy', CSP_HEADER);
   res.setHeader('Permissions-Policy', PERMISSIONS_POLICY_HEADER);
   res.setHeader('X-Content-Type-Options', 'nosniff');
-
-  // HSTS for HTTPS
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
-
-  // Cross-Origin isolation
   res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
   res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
 
@@ -56,10 +51,18 @@ app.use((req, res, next) => {
     res.set('Expires', '0');
   }
 
+  // Fetch metadata headers (if missing in request, set defaults)
+  res.setHeader('Sec-Fetch-Dest', req.get('Sec-Fetch-Dest') || 'document');
+  res.setHeader('Sec-Fetch-Mode', req.get('Sec-Fetch-Mode') || 'navigate');
+  res.setHeader('Sec-Fetch-Site', req.get('Sec-Fetch-Site') || 'same-origin');
+  res.setHeader('Sec-Fetch-User', req.get('Sec-Fetch-User') || '?1');
+
   next();
 });
 
-// Helmet extra headers
+// ----------------------
+// HELMET ENHANCEMENTS
+// ----------------------
 app.use(
   helmet({
     crossOriginEmbedderPolicy: true,
@@ -69,17 +72,6 @@ app.use(
     noSniff: true
   })
 );
-
-// ----------------------
-// FETCH METADATA PROTECTION
-// ----------------------
-app.use((req, res, next) => {
-  const site = req.get('Sec-Fetch-Site');
-  if (site && site !== 'same-origin' && site !== 'same-site') {
-    return res.status(400).send('Blocked by Fetch Metadata policy');
-  }
-  next();
-});
 
 // ----------------------
 // SAFE FILE ACCESS
@@ -106,7 +98,9 @@ function resolveSafe(baseDir, userInput) {
   return resolvedPath;
 }
 
-// File serving endpoint
+// ----------------------
+// FILE SERVING ENDPOINT
+// ----------------------
 app.get('/files/*', (req, res) => {
   let filePath;
   try {

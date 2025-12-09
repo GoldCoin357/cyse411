@@ -8,13 +8,36 @@ const app = express();
 app.use(express.json());
 
 // ----------------------
-// REMOVE X-POWERED-BY
+// SECURITY HEADERS (GLOBAL)
 // ----------------------
-app.disable('x-powered-by');
+const CSP_HEADER =
+  "default-src 'none'; " +
+  "script-src 'self'; style-src 'self'; img-src 'self' data:; " +
+  "connect-src 'self'; font-src 'self'; object-src 'none'; " +
+  "frame-ancestors 'none'; form-action 'self'; base-uri 'self'; " +
+  "worker-src 'self'; manifest-src 'self'; frame-src 'none'";
 
-// ----------------------
-// HELMET SECURITY HEADERS
-// ----------------------
+const PERMISSIONS_POLICY_HEADER =
+  'camera=(), microphone=(), geolocation=(), fullscreen=(self), payment=()';
+
+// Apply to all responses
+app.use((req, res, next) => {
+  res.removeHeader('X-Powered-By');
+  res.setHeader('Content-Security-Policy', CSP_HEADER);
+  res.setHeader('Permissions-Policy', PERMISSIONS_POLICY_HEADER);
+
+  if (req.path.endsWith('robots.txt') || req.path.endsWith('sitemap.xml')) {
+    res.set('Cache-Control', 'public, max-age=3600, immutable');
+  } else {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+  }
+
+  next();
+});
+
+// Helmet for extra headers
 app.use(
   helmet({
     crossOriginEmbedderPolicy: true,
@@ -26,35 +49,6 @@ app.use(
     frameguard: { action: 'deny' },
   })
 );
-
-// ----------------------
-// GLOBAL HEADERS
-// ----------------------
-const cspHeader =
-  "default-src 'none'; " +
-  "script-src 'self'; style-src 'self'; img-src 'self' data:; " +
-  "connect-src 'self'; font-src 'self'; object-src 'none'; " +
-  "frame-ancestors 'none'; form-action 'self'; base-uri 'self'; " +
-  "worker-src 'self'; manifest-src 'self'; frame-src 'none'";
-
-const permissionsPolicyHeader =
-  'camera=(), microphone=(), geolocation=(), fullscreen=(self), payment=()';
-
-app.use((req, res, next) => {
-  res.setHeader('Content-Security-Policy', cspHeader);
-  res.setHeader('Permissions-Policy', permissionsPolicyHeader);
-
-  // Cache control
-  if (req.path.endsWith('robots.txt') || req.path.endsWith('sitemap.xml')) {
-    res.set('Cache-Control', 'public, max-age=3600, immutable');
-  } else {
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.set('Pragma', 'no-cache');
-    res.set('Expires', '0');
-  }
-
-  next();
-});
 
 // ----------------------
 // FETCH METADATA PROTECTION
@@ -86,73 +80,4 @@ function resolveSafe(baseDir, userInput) {
   const resolvedPath = path.resolve(baseDir, normalizedInput);
   const relative = path.relative(baseDir, resolvedPath);
 
-  if (relative.startsWith('..') || path.isAbsolute(relative) || !resolvedPath.startsWith(baseDir)) {
-    throw new Error('Path traversal attempt detected');
-  }
-
-  return resolvedPath;
-}
-
-app.post('/read', (req, res) => {
-  const filename = req.body.filename;
-
-  let safePath;
-  try {
-    safePath = resolveSafe(BASE_DIR, filename);
-  } catch (err) {
-    return res.status(403).json({ error: err.message });
-  }
-
-  if (!fs.existsSync(safePath)) {
-    return res.status(404).json({ error: 'File not found' });
-  }
-
-  try {
-    const content = fs.readFileSync(safePath, 'utf8');
-    res.json({ path: path.relative(BASE_DIR, safePath), content });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to read file' });
-  }
-});
-
-// ----------------------
-// SERVE STATIC FILES SECURELY
-// ----------------------
-app.use(
-  '/files',
-  express.static(BASE_DIR, {
-    etag: false,
-    lastModified: false,
-    setHeaders: (res, filePath) => {
-      // Security headers
-      res.setHeader('Content-Security-Policy', cspHeader);
-      res.setHeader('Permissions-Policy', permissionsPolicyHeader);
-      res.removeHeader('X-Powered-By');
-
-      // Cache control
-      if (filePath.endsWith('robots.txt') || filePath.endsWith('sitemap.xml')) {
-        res.set('Cache-Control', 'public, max-age=3600, immutable');
-      } else {
-        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-        res.set('Pragma', 'no-cache');
-        res.set('Expires', '0');
-      }
-    },
-  })
-);
-
-// ----------------------
-// CSP REPORT ENDPOINT
-// ----------------------
-app.post('/csp-report', express.json({ type: ['application/csp-report'] }), (req, res) => {
-  console.log('CSP Violation:', req.body);
-  res.status(204).send();
-});
-
-// ----------------------
-// START SERVER
-// ----------------------
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`Secure file server running on http://localhost:${PORT}`);
-});
+  if (relative.startsWith('..') || path

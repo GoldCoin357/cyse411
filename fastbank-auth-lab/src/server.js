@@ -10,13 +10,11 @@ const rateLimit = require("express-rate-limit");
 const app = express();
 const PORT = 3001;
 
-// ----------------------
-// SECURITY HEADERS
-// ----------------------
+
 app.disable("x-powered-by");
 app.use(helmet());
 
-// Strong CSP
+
 app.use(
   helmet.contentSecurityPolicy({
     directives: {
@@ -37,7 +35,7 @@ app.use(
   })
 );
 
-// Permissions Policy
+
 app.use(
   helmet.permissionsPolicy({
     features: {
@@ -52,7 +50,7 @@ app.use(
   })
 );
 
-// Sec-Fetch defaults for ZAP
+
 app.use((req, res, next) => {
   res.setHeader("Sec-Fetch-Dest", "document");
   res.setHeader("Sec-Fetch-Mode", "navigate");
@@ -61,7 +59,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Cache control
+
 app.use((req, res, next) => {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
   res.setHeader("Pragma", "no-cache");
@@ -69,17 +67,12 @@ app.use((req, res, next) => {
   next();
 });
 
-// ----------------------
-// BODY / COOKIE PARSERS
-// ----------------------
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 app.use(cookieParser());
 app.use(express.static("public"));
 
-// ----------------------
-// RATE LIMITING
-// ----------------------
+
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
@@ -87,17 +80,13 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// ----------------------
-// IN-MEMORY STORAGE (DEMO)
-// ----------------------
+
 const users = [
   { id: 1, username: "student", passwordHash: "" }, // hashed later
 ];
 const sessions = {}; // token -> { userId, expires }
 
-// ----------------------
-// SECURE HELPERS
-// ----------------------
+
 async function hashPassword(password) {
   return bcrypt.hash(password, 12);
 }
@@ -110,16 +99,12 @@ function generateToken() {
   return crypto.randomBytes(32).toString("hex");
 }
 
-// ----------------------
-// DEMO INITIALIZATION
-// ----------------------
+
 (async () => {
   users[0].passwordHash = await hashPassword("securepassword123");
 })();
 
-// ----------------------
-// LOGIN ENDPOINT
-// ----------------------
+
 app.post("/login", loginLimiter, async (req, res) => {
   const { username, password } = req.body;
   const user = users.find((u) => u.username === username);
@@ -134,9 +119,7 @@ app.post("/login", loginLimiter, async (req, res) => {
   res.json({ token });
 });
 
-// ----------------------
-// AUTH MIDDLEWARE
-// ----------------------
+
 function auth(req, res, next) {
   const token = req.header("Authorization")?.replace("Bearer ", "");
   const session = sessions[token];
@@ -146,14 +129,10 @@ function auth(req, res, next) {
   next();
 }
 
-// ----------------------
-// SECURE ROUTE EXAMPLE
-// ----------------------
+
 app.get("/profile", auth, (req, res) => {
   res.json({ username: req.user.username, id: req.user.id });
 });
 
-// ----------------------
-// START SERVER
-// ----------------------
+
 app.listen(PORT, () => console.log(`Secure server running on http://localhost:${PORT}`));

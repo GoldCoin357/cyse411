@@ -1,5 +1,3 @@
-
-// secure-orders-api.js
 const express = require("express");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
@@ -7,49 +5,56 @@ const rateLimit = require("express-rate-limit");
 const app = express();
 app.use(express.json());
 
-// ---------- Security Headers ----------
+// ----------------------
+// SECURITY HEADERS
+// ----------------------
+app.disable("x-powered-by"); // remove X-Powered-By
+
+app.use(helmet()); // default secure headers
+
+// Strong CSP
 app.use(
-  helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'"],
-        styleSrc: ["'self'"],
-        imgSrc: ["'self'"],
-        connectSrc: ["'self'"],
-        fontSrc: ["'self'"],
-        objectSrc: ["'none'"],
-        frameAncestors: ["'none'"],
-        formAction: ["'self'"],
-      },
+  helmet.contentSecurityPolicy({
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'"],
+      imgSrc: ["'self'", "data:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      formAction: ["'self'"],
+      baseUri: ["'self'"],
+      workerSrc: ["'self'"],
+      manifestSrc: ["'self'"],
     },
-    crossOriginEmbedderPolicy: true,
-    crossOriginOpenerPolicy: true,
-    crossOriginResourcePolicy: { policy: "same-origin" },
-    referrerPolicy: { policy: "no-referrer" },
-    hsts: { maxAge: 31536000, includeSubDomains: true },
-    hidePoweredBy: true,
   })
 );
 
-// Permissions Policy header
-app.use((req, res, next) => {
-  res.setHeader(
-    "Permissions-Policy",
-    "geolocation=(), microphone=(), camera=(), fullscreen=(self)"
-  );
-  next();
-});
+// Permissions Policy via Helmet
+app.use(
+  helmet.permissionsPolicy({
+    features: {
+      geolocation: ["'none'"],
+      camera: ["'none'"],
+      microphone: ["'none'"],
+      fullscreen: ["'self'"],
+    },
+  })
+);
 
-// Prevent caching sensitive responses
+// Prevent caching of sensitive responses
 app.use((req, res, next) => {
-  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate, private");
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
   next();
 });
 
-// ---------- Rate Limiting ----------
+// ----------------------
+// RATE LIMITING
+// ----------------------
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -58,7 +63,9 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// ---------- Fake "Database" ----------
+// ----------------------
+// FAKE "DATABASE"
+// ----------------------
 const users = [
   { id: 1, name: "Alice", role: "customer", department: "north" },
   { id: 2, name: "Bob", role: "customer", department: "south" },
@@ -72,27 +79,30 @@ const orders = [
   { id: 4, userId: 2, item: "Keyboard", region: "south", total: 60 },
 ];
 
-// Demo static token authentication
+// Demo token authentication
 const DEMO_TOKENS = {
   "token-alice": 1,
   "token-bob": 2,
   "token-charlie": 3,
 };
 
-// ---------- Authentication Middleware ----------
+// ----------------------
+// AUTH MIDDLEWARE
+// ----------------------
 function auth(req, res, next) {
   const token = req.header("Authorization")?.replace("Bearer ", "");
   const userId = DEMO_TOKENS[token];
   if (!userId) return res.status(401).json({ error: "Invalid token" });
 
-  const user = users.find((u) => u.id === userId);
-  req.user = user;
+  req.user = users.find((u) => u.id === userId);
   next();
 }
 
 app.use(auth);
 
-// ---------- Secure Orders Endpoint ----------
+// ----------------------
+// ORDERS ENDPOINT
+// ----------------------
 app.get("/orders/:id", (req, res) => {
   const orderId = parseInt(req.params.id, 10);
   const order = orders.find((o) => o.id === orderId);
@@ -115,6 +125,8 @@ app.get("/", (req, res) => {
   res.json({ message: "Secure Orders API", currentUser: req.user.name });
 });
 
-// ---------- Start Server ----------
+// ----------------------
+// START SERVER
+// ----------------------
 const PORT = 3000;
 app.listen(PORT, () => console.log(`Secure API running at http://localhost:${PORT}`));

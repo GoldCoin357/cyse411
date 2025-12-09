@@ -9,71 +9,110 @@ const https = require("https");
 const app = express();
 
 // ---------------------
-// Disable X-Powered-By
+// 1. Global Security Middleware
 // ---------------------
-app.disable("x-powered-by");
+app.disable("x-powered-by"); // remove Express header
+
 app.use((req, res, next) => {
+  // Remove X-Powered-By again to be sure
   res.removeHeader("X-Powered-By");
+
+  // ---------------------
+  // 2. Strong CSP
+  // ---------------------
+  const csp = `
+    default-src 'none';
+    script-src 'self';
+    style-src 'self';
+    img-src 'self' data:;
+    connect-src 'self';
+    font-src 'self';
+    object-src 'none';
+    frame-ancestors 'none';
+    form-action 'self';
+    base-uri 'none';
+    worker-src 'self';
+    manifest-src 'self';
+    frame-src 'none';
+  `;
+  res.setHeader("Content-Security-Policy", csp.replace(/\s+/g, " ").trim());
+
+  // ---------------------
+  // 3. Permissions Policy
+  // ---------------------
+  res.setHeader(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=(), fullscreen=(), payment=()"
+  );
+
+  // ---------------------
+  // 4. Cross-Origin
+  // ---------------------
+  res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+  res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+
+  // ---------------------
+  // 5. Cache-Control
+  // ---------------------
+  if (req.path.endsWith("robots.txt") || req.path.endsWith("sitemap.xml")) {
+    res.setHeader("Cache-Control", "public, max-age=3600, immutable");
+  } else {
+    res.setHeader(
+      "Cache-Control",
+      "no-store, no-cache, must-revalidate, private"
+    );
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+  }
+
   next();
 });
 
 // ---------------------
-// Helmet security
+// 6. Helmet Enhancements
 // ---------------------
-app.use(helmet());
-
-// Strong CSP
 app.use(
-  helmet.contentSecurityPolicy({
-    useDefaults: false,
-    directives: {
-      "default-src": ["'none'"],
-      "script-src": ["'self'"],
-      "style-src": ["'self'"],
-      "img-src": ["'self'"],
-      "connect-src": ["'self'"],
-      "font-src": ["'self'"],
-      "frame-ancestors": ["'none'"],
-      "base-uri": ["'none'"],
-      "form-action": ["'self'"],
-      "manifest-src": ["'self'"]
-    }
+  helmet({
+    crossOriginEmbedderPolicy: true,
+    crossOriginOpenerPolicy: { policy: "same-origin" },
+    frameguard: { action: "deny" },
+    referrerPolicy: { policy: "no-referrer" },
+    noSniff: true,
   })
 );
 
-// Permissions-Policy
-app.use((req, res, next) => {
-  res.setHeader("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
-  next();
-});
-
-// No cache
-app.use((req, res, next) => {
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
-  next();
-});
-
-// Rate limit
+// ---------------------
+// 7. Rate Limiting
+// ---------------------
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 app.use(limiter);
 
-// Static
-app.use(express.static("public"));
+// ---------------------
+// 8. Serve Static Files (public folder)
+// ---------------------
+app.use(express.static(path.join(__dirname, "public")));
 
-// Default route
-app.get("/", (req, res) => res.send("Secure HTTPS server running."));
+// ---------------------
+// 9. Default Route
+// ---------------------
+app.get("/", (req, res) => {
+  res.send("Secure HTTPS server running.");
+});
 
-// HTTPS setup
+// ---------------------
+// 10. HTTPS Setup
+// ---------------------
 const options = {
   key: fs.readFileSync(path.join(__dirname, "certs", "key.pem")),
-  cert: fs.readFileSync(path.join(__dirname, "certs", "cert.pem"))
+  cert: fs.readFileSync(path.join(__dirname, "certs", "cert.pem")),
 };
 
-https.createServer(options, app).listen(4000, () =>
-  console.log("HTTPS server running on port 4000")
-);
+const PORT = process.env.PORT || 4000;
+https.createServer(options, app).listen(PORT, () => {
+  console.log(`Secure HTTPS server running on port ${PORT}`);
+});

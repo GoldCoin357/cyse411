@@ -1,78 +1,117 @@
 name: DAST - OWASP ZAP Full Scan
-
 on:
   workflow_dispatch:
-
+    inputs:
+      branch:
+        description: 'Branch to scan'
+        required: false
+        default: 'main'
 jobs:
   zap-scan:
     runs-on: ubuntu-latest
-
     steps:
-    # 1️⃣ Checkout repository
+    # 1️⃣ Checkout repository - UPDATED to ensure fresh code
     - name: Checkout repository
-      uses: actions/checkout@v3
-
-    # 2️⃣ Set up Node.js
-    - name: Set up Node.js
-      uses: actions/setup-node@v3
+      uses: actions/checkout@v4
       with:
-        node-version: '16'
-
+        ref: ${{ github.event.inputs.branch || github.ref }}
+        fetch-depth: 0  # Fetch all history to ensure we have latest
+    
+    # 1.5️⃣ Verify which code we're testing
+    - name: Show current commit
+      run: |
+        echo "Testing code from commit:"
+        git log -1 --oneline
+        echo "Branch: $(git branch --show-current)"
+    
+    # 2️⃣ Set up Node.js - UPDATED to newer version
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: './fastbank_insecure_classwork/backend/package-lock.json'
+    
     # 3️⃣ Install backend dependencies
     - name: Install dependencies
       working-directory: ./fastbank_insecure_classwork/backend
-      run: npm install
-
+      run: |
+        echo "Installing fresh dependencies..."
+        rm -rf node_modules package-lock.json
+        npm install
+    
     # 4️⃣ Start the backend server
     - name: Start backend
       working-directory: ./fastbank_insecure_classwork/backend
       run: |
         npm start &
+        SERVER_PID=$!
+        echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
         echo "Waiting for backend to start..."
         # Wait up to 60 seconds for server to respond
         for i in {1..20}; do
           if curl -s http://localhost:4000; then
-            echo "Backend is up"
+            echo "✅ Backend is up and running!"
             break
           fi
-          echo "Waiting 3s..."
+          echo "⏳ Waiting 3s... (attempt $i/20)"
           sleep 3
         done
-
+    
     # 5️⃣ Verify backend is running
     - name: Verify backend
-      run: curl -I http://localhost:4000
-
+      run: |
+        echo "Checking backend health..."
+        curl -I http://localhost:4000
+        echo "Backend process check:"
+        ps aux | grep node || true
+    
     # 6️⃣ Get the host IP for Docker
     - name: Set host IP for Docker
       id: hostip
       run: |
         echo "HOST_IP=$(ip -4 addr show docker0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')" >> $GITHUB_ENV
         echo "Using HOST_IP=${HOST_IP}"
-
+    
     # 7️⃣ Test Docker can reach backend
     - name: Test Docker connectivity
-      run: docker run --rm curlimages/curl curl -s http://${{ env.HOST_IP }}:4000
-
-    # 8️⃣ Run OWASP ZAP Full Scan
+      run: |
+        echo "Testing connectivity from Docker to backend..."
+        docker run --rm curlimages/curl curl -v http://${{ env.HOST_IP }}:4000
+    
+    # 8️⃣ Run OWASP ZAP Full Scan - UPDATED with better options
     - name: Run OWASP ZAP Full Scan
       uses: zaproxy/action-full-scan@v0.13.0
       continue-on-error: true
       with:
         docker_name: 'ghcr.io/zaproxy/zaproxy:weekly'
         target: "http://${{ env.HOST_IP }}:4000"
-        cmd_options: '-a'
+        cmd_options: '-a -j'  # -a for AJAX spider, -j for JSON output
         allow_issue_writing: false
         fail_action: false
-
+    
     # 9️⃣ Check that the report exists and is not empty
     - name: Check report size
-      run: ls -lh report_html.html
-
-    # 🔟 Upload HTML report
+      run: |
+        echo "Report details:"
+        ls -lh report_html.html
+        echo "Report preview (first 50 lines):"
+        head -n 50 report_html.html
+    
+    # 🔟 Upload HTML report with timestamp
     - name: Upload ZAP Report
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: zap-report
-        path: report_html.html
+        name: zap-report-${{ github.run_number }}
+        path: |
+          report_html.html
+          report_json.json
+        retention-days: 30
+    
+    # 1️⃣1️⃣ Cleanup - stop backend server
+    - name: Cleanup
+      if: always()
+      run: |
+        echo "Stopping backend server..."
+        kill ${{ env.SERVER_PID }} || true

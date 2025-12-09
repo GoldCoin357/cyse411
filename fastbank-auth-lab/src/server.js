@@ -1,9 +1,10 @@
+// server.js
 const express = require("express");
 const bodyParser = require("body-parser");
 const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
-const crypto = require("crypto");
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 const rateLimit = require("express-rate-limit");
 
 const app = express();
@@ -12,7 +13,7 @@ const PORT = 3001;
 // ----------------------
 // SECURITY HEADERS
 // ----------------------
-app.disable("x-powered-by"); // remove X-Powered-By
+app.disable("x-powered-by");
 app.use(helmet());
 
 // Strong CSP
@@ -31,11 +32,12 @@ app.use(
       baseUri: ["'self'"],
       workerSrc: ["'self'"],
       manifestSrc: ["'self'"],
+      frameSrc: ["'none'"],
     },
   })
 );
 
-// Permissions Policy using Helmet
+// Permissions Policy
 app.use(
   helmet.permissionsPolicy({
     features: {
@@ -49,6 +51,15 @@ app.use(
     },
   })
 );
+
+// Sec-Fetch defaults for ZAP
+app.use((req, res, next) => {
+  res.setHeader("Sec-Fetch-Dest", "document");
+  res.setHeader("Sec-Fetch-Mode", "navigate");
+  res.setHeader("Sec-Fetch-Site", "same-origin");
+  res.setHeader("Sec-Fetch-User", "?1");
+  next();
+});
 
 // Cache control
 app.use((req, res, next) => {
@@ -77,9 +88,11 @@ const loginLimiter = rateLimit({
 });
 
 // ----------------------
-// IN-MEMORY STORAGE (DEMO ONLY)
+// IN-MEMORY STORAGE (DEMO)
 // ----------------------
-const users = [{ id: 1, username: "student", passwordHash: "" }];
+const users = [
+  { id: 1, username: "student", passwordHash: "" }, // hashed later
+];
 const sessions = {}; // token -> { userId, expires }
 
 // ----------------------
@@ -89,4 +102,58 @@ async function hashPassword(password) {
   return bcrypt.hash(password, 12);
 }
 
-async function verifyPassw
+async function verifyPassword(password, hash) {
+  return bcrypt.compare(password, hash);
+}
+
+function generateToken() {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+// ----------------------
+// DEMO INITIALIZATION
+// ----------------------
+(async () => {
+  users[0].passwordHash = await hashPassword("securepassword123");
+})();
+
+// ----------------------
+// LOGIN ENDPOINT
+// ----------------------
+app.post("/login", loginLimiter, async (req, res) => {
+  const { username, password } = req.body;
+  const user = users.find((u) => u.username === username);
+  if (!user) return res.status(401).json({ error: "Invalid credentials" });
+
+  const valid = await verifyPassword(password, user.passwordHash);
+  if (!valid) return res.status(401).json({ error: "Invalid credentials" });
+
+  const token = generateToken();
+  sessions[token] = { userId: user.id, expires: Date.now() + 3600000 }; // 1hr
+
+  res.json({ token });
+});
+
+// ----------------------
+// AUTH MIDDLEWARE
+// ----------------------
+function auth(req, res, next) {
+  const token = req.header("Authorization")?.replace("Bearer ", "");
+  const session = sessions[token];
+  if (!session || session.expires < Date.now()) return res.status(401).json({ error: "Unauthorized" });
+
+  req.user = users.find((u) => u.id === session.userId);
+  next();
+}
+
+// ----------------------
+// SECURE ROUTE EXAMPLE
+// ----------------------
+app.get("/profile", auth, (req, res) => {
+  res.json({ username: req.user.username, id: req.user.id });
+});
+
+// ----------------------
+// START SERVER
+// ----------------------
+app.listen(PORT, () => console.log(`Secure server running on http://localhost:${PORT}`));

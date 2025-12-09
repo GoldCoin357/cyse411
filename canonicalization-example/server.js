@@ -11,10 +11,14 @@ app.use(express.json());
 // SECURITY HEADERS
 // ----------------------
 
-// Remove X-Powered-By
+// Remove X-Powered-By immediately
 app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.removeHeader('X-Powered-By');
+  next();
+});
 
-// Helmet default headers + HSTS
+// Helmet defaults + HSTS
 app.use(
   helmet({
     crossOriginEmbedderPolicy: true,
@@ -25,29 +29,29 @@ app.use(
   })
 );
 
-// Strong CSP
-app.use(
-  helmet.contentSecurityPolicy({
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'"],
-      imgSrc: ["'self'", "data:"],
-      connectSrc: ["'self'"],
-      fontSrc: ["'self'"],
-      objectSrc: ["'none'"],
-      frameAncestors: ["'none'"],
-      formAction: ["'none'"],   // lock down forms completely
-      baseUri: ["'none'"],      // no <base> tag allowed
-      workerSrc: ["'self'"],
-      manifestSrc: ["'self'"],
-      childSrc: ["'none'"],
-      frameSrc: ["'none'"],
-    },
-  })
-);
+// Canonical CSP
+app.use((req, res, next) => {
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'none'; " +
+      "script-src 'self'; " +
+      "style-src 'self'; " +
+      "img-src 'self' data:; " +
+      "connect-src 'self'; " +
+      "font-src 'self'; " +
+      "object-src 'none'; " +
+      "frame-ancestors 'none'; " +
+      "form-action 'none'; " +
+      "base-uri 'none'; " +
+      "worker-src 'self'; " +
+      "manifest-src 'self'; " +
+      "child-src 'none'; " +
+      "frame-src 'none'"
+  );
+  next();
+});
 
-// Complete Permissions Policy (new API style)
+// Permissions Policy (canonical form)
 app.use(
   helmet.permissionsPolicy({
     policy: {
@@ -168,4 +172,3 @@ const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`Secure file server running on http://localhost:${PORT}`);
 });
-

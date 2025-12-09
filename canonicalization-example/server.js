@@ -37,43 +37,62 @@ app.use(
       fontSrc: ["'self'"],
       objectSrc: ["'none'"],
       frameAncestors: ["'none'"],
-      formAction: ["'self'"],
-      baseUri: ["'self'"],
+      formAction: ["'none'"],   // lock down forms completely
+      baseUri: ["'none'"],      // no <base> tag allowed
       workerSrc: ["'self'"],
       manifestSrc: ["'self'"],
-      childSrc: ["'none'"],       // fallback for frames
-      frameSrc: ["'none'"],       // fallback for frames
+      childSrc: ["'none'"],
+      frameSrc: ["'none'"],
     },
   })
 );
 
-// Complete Permissions Policy
+// Complete Permissions Policy (new API style)
 app.use(
   helmet.permissionsPolicy({
-    features: {
-      accelerometer: ["'none'"],
-      autoplay: ["'none'"],
-      camera: ["'none'"],
-      encryptedMedia: ["'none'"],
-      fullscreen: ["'self'"],
-      geolocation: ["'none'"],
-      gyroscope: ["'none'"],
-      magnetometer: ["'none'"],
-      microphone: ["'none'"],
-      payment: ["'none'"],
-      usb: ["'none'"],
-      speaker: ["'none'"],
-      vr: ["'none'"],
-      interestCohort: ["'none'"],
+    policy: {
+      accelerometer: [],
+      autoplay: [],
+      camera: [],
+      encryptedMedia: [],
+      fullscreen: ["self"],
+      geolocation: [],
+      gyroscope: [],
+      magnetometer: [],
+      microphone: [],
+      payment: [],
+      usb: [],
+      speaker: [],
+      vr: [],
+      interestCohort: [],
     },
   })
 );
 
-// Prevent caching of all responses
+// Cache-control: no-store for HTML, allow robots/sitemap caching
 app.use((req, res, next) => {
-  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-  res.set('Pragma', 'no-cache');
-  res.set('Expires', '0');
+  if (req.path.endsWith('robots.txt') || req.path.endsWith('sitemap.xml')) {
+    res.set('Cache-Control', 'public, max-age=3600');
+  } else {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+  }
+  next();
+});
+
+// Fetch Metadata protection
+app.use((req, res, next) => {
+  const site = req.get('Sec-Fetch-Site');
+  const mode = req.get('Sec-Fetch-Mode');
+  const dest = req.get('Sec-Fetch-Dest');
+
+  const isSameOrigin = site === 'same-origin' || site === 'same-site';
+  const isTopNav = mode === 'navigate' && dest === 'document';
+
+  if (site && !isSameOrigin && !isTopNav) {
+    return res.status(400).send('Blocked by Fetch Metadata policy');
+  }
   next();
 });
 
@@ -124,16 +143,20 @@ app.post('/read', (req, res) => {
   }
 });
 
-// Serve static files securely with no caching
+// Serve static files securely
 app.use(
   '/files',
   express.static(BASE_DIR, {
     etag: false,
     lastModified: false,
     setHeaders: (res, filePath) => {
-      res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-      res.set('Pragma', 'no-cache');
-      res.set('Expires', '0');
+      if (filePath.endsWith('robots.txt') || filePath.endsWith('sitemap.xml')) {
+        res.set('Cache-Control', 'public, max-age=3600');
+      } else {
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+        res.set('Pragma', 'no-cache');
+        res.set('Expires', '0');
+      }
     },
   })
 );
@@ -145,3 +168,4 @@ const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`Secure file server running on http://localhost:${PORT}`);
 });
+

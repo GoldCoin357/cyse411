@@ -7,64 +7,18 @@ app.use(express.json());
 const users = [
   { id: 1, name: "Alice", role: "customer", department: "north" },
   { id: 2, name: "Bob", role: "customer", department: "south" },
-  { id: 3, name: "Charlie", role: "support", department: "north" },
+  { id: 3, name: "Charlie", role: "support", department: "north" }
 ];
 
 const orders = [
   { id: 1, userId: 1, item: "Laptop", region: "north", total: 2000 },
   { id: 2, userId: 1, item: "Mouse", region: "north", total: 40 },
   { id: 3, userId: 2, item: "Monitor", region: "south", total: 300 },
-  { id: 4, userId: 2, item: "Keyboard", region: "south", total: 60 },
+  { id: 4, userId: 2, item: "Keyboard", region: "south", total: 60 }
 ];
 
-// Very simple "authentication" via headers
-function fakeAuth(req, res, next) {
-  const idHeader = req.header("X-User-Id");
-  const id = idHeader ? parseInt(idHeader, 10) : null;
-
-  const user = users.find((u) => u.id === id);
-  if (!user) {
-    return res.status(401).json({ error: "Unauthenticated: set X-User-Id" });
-  }
-
-  req.user = user;
-  next();
-}
-
-app.use(fakeAuth);
-
-// SECURE endpoint: enforce ownership / role-based access
-app.get("/orders/:id", (req, res) => {
-  const orderId = parseInt(req.params.id, 10);
-  const order = orders.find((o) => o.id === orderId);
-
-  if (!order) {
-    return res.status(404).json({ error: "Order not found" });
-  }
-
-  const user = req.user;
-
-  // Customers can only see their own orders
-  if (user.role === "customer" && order.userId !== user.id) {
-    return res.status(403).json({ error: "Forbidden: not your order" });
-  }
-
-  // Support staff can only see orders in their department/region
-  if (user.role === "support" && order.region !== user.department) {
-    return res.status(403).json({ error: "Forbidden: outside your department" });
-  }
-
-  // Otherwise authorized
-  return res.json(order);
-});
-
-// Health check
-app.get("/", (req, res) => {
-  res.json({ message: "Access Control Tutorial API", currentUser: req.user });
-});
-
-// Start server
-const PORT = 3000;
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-});
+// -------- Secure Authentication (No ID in Headers) --------
+// Using a static demo token instead of header-based IDOR
+const DEMO_TOKENS = {
+  "token-alice": 1,
+  "token-bob": 2,
